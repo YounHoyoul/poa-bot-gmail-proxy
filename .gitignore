@@ -1,0 +1,5 @@
+src/credentials
+.env
+src/storage
+node_modules
+

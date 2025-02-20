@@ -1,0 +1,25 @@
+{
+  "name": "poa-bot-gmail-proxy",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "watch": "node ./src/command/watch.js",
+    "stop": "node ./src/command/stop.js",
+    "token": "node ./src/command/token.js",
+    "listen": "node ./src/command/subscriber.js",
+    "server": "node ./src/command/server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@google-cloud/pubsub": "^4.10.0",
+    "axios": "^1.7.9",
+    "date-fns": "^4.1.0",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "googleapis": "^144.0.0"
+  }
+}

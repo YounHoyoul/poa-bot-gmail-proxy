@@ -1,9 +1,8 @@
-import { writeFileSync, existsSync, mkdirSync } from 'fs';
 import { google, gmail_v1 } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
 import { LoggingService } from './LoggingService.js';
 import 'dotenv/config';
-import path from 'path';
+import { StorageService } from './StorageService.js';
 
 interface EnvironmentVariables {
   TOPIC_NAME: string;
@@ -12,9 +11,11 @@ interface EnvironmentVariables {
 
 export class GmailWatchService {
   private gmail: gmail_v1.Gmail;
+  private storageService: StorageService;
 
-  constructor(auth: OAuth2Client) {
+  constructor(auth: OAuth2Client, storageService: StorageService) {
     this.gmail = google.gmail({ version: 'v1', auth });
+    this.storageService = storageService;
   }
 
   async watchGmail(): Promise<void> {
@@ -37,23 +38,7 @@ export class GmailWatchService {
 
       LoggingService.logToFile(`Watch response: ${JSON.stringify(res)}`);
 
-      if (!env.STORAGE_PATH) {
-        throw new Error('STORAGE_PATH is not set in environment variables.');
-      }
-
-      try {
-        const storageDir = path.dirname(env.STORAGE_PATH);
-        if (!existsSync(storageDir)) {
-          mkdirSync(storageDir, { recursive: true });
-          LoggingService.logToFile(`Storage directory created: ${storageDir}`);
-        }
-        writeFileSync(env.STORAGE_PATH, JSON.stringify(res), 'utf8'); // Add 'utf8' encoding
-      } catch (writeError) {
-        LoggingService.logToFile(
-          `Error writing to storage file: ${(writeError as Error).message}`,
-          true
-        );
-      }
+      this.storageService.storeHistory(JSON.stringify(res));
     } catch (error) {
       LoggingService.logToFile(`Error setting up Gmail watch: ${(error as Error).message}`, true);
     }

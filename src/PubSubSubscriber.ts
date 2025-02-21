@@ -4,7 +4,7 @@ import { gmail_v1 } from 'googleapis';
 import { PubSub, Subscription } from '@google-cloud/pubsub';
 import { LoggingService } from './LoggingService.js';
 import { GmailMessageService } from './GmailMessageService.js';
-import { writeFileSync, readFileSync, existsSync } from 'fs';
+import { StorageService } from './StorageService.js';
 
 interface PubSubConfig {
   projectId: string;
@@ -25,10 +25,12 @@ interface EnvironmentVariables {
 
 export class PubSubSubscriber {
   private messageService: GmailMessageService;
+  private storageService: StorageService;
 
-  constructor(messageService: GmailMessageService) {
+  constructor(messageService: GmailMessageService, storageService: StorageService) {
     this.validateEnvironmentVars();
     this.messageService = messageService;
+    this.storageService = storageService;
   }
 
   private validateEnvironmentVars(): void {
@@ -37,7 +39,7 @@ export class PubSubSubscriber {
       !env.PROJECT_ID ||
       !env.SUBSCRIPTION_CREDENTIALS_PATH ||
       !env.SUBSCRIPTION_NAME ||
-      !env.STORAGE_PATH || // Validate STORAGE_PATH
+      !env.STORAGE_PATH ||
       !env.WEBHOOK_URL
     ) {
       LoggingService.logToFile('Error: Missing required environment variables.', true);
@@ -62,15 +64,11 @@ export class PubSubSubscriber {
           LoggingService.logToFile(`Received message: ${message.id}`);
           LoggingService.logToFile(`Data: ${message.data.toString()}`);
 
-          // Storage Handling with Error Handling
           try {
-            if (!existsSync(env.STORAGE_PATH)) {
-              console.warn('Storage file does not exist, creating a new one.');
-              writeFileSync(env.STORAGE_PATH, JSON.stringify({ historyId: '0' }));
-            }
-
-            const lastHistory: StorageData = JSON.parse(readFileSync(env.STORAGE_PATH, 'utf8'));
-            writeFileSync(env.STORAGE_PATH, message.data.toString()); // Consider atomicity here
+            const lastHistory: StorageData = JSON.parse(
+              (await this.storageService.readHistory()) || '{}'
+            );
+            await this.storageService.storeHistory(message.data.toString());
 
             const emails: gmail_v1.Schema$Message[] =
               await this.messageService.getEmailsByHistoryId(lastHistory.historyId, 'me');

@@ -6,11 +6,6 @@ import { LoggingService } from './LoggingService.js';
 import { GmailMessageService } from './GmailMessageService.js';
 import { StorageService } from './StorageService.js';
 
-interface PubSubConfig {
-  projectId: string;
-  keyFilename: string;
-}
-
 interface StorageData {
   historyId: string;
 }
@@ -51,64 +46,37 @@ export class PubSubSubscriber {
     try {
       const env: EnvironmentVariables = process.env as unknown as EnvironmentVariables;
 
-      const pubSubConfig: PubSubConfig = {
+      const pubSubClient = new PubSub({
         projectId: env.PROJECT_ID,
         keyFilename: env.SUBSCRIPTION_CREDENTIALS_PATH,
-      };
+      });
 
-      const pubSubClient = new PubSub(pubSubConfig);
       const subscription: Subscription = pubSubClient.subscription(env.SUBSCRIPTION_NAME);
 
-      subscription.on('message', async (message) => {
+      const messageHandler = async (message: { id: string; data: Buffer; ack: () => void }) => {
+        // Type the message
         try {
           LoggingService.logToFile(`Received message: ${message.id}`);
-          LoggingService.logToFile(`Data: ${message.data.toString()}`);
+          const messageData = message.data.toString(); // Extract data once
+          LoggingService.logToFile(`Data: ${messageData}`);
 
           try {
             const lastHistory: StorageData = JSON.parse(
               (await this.storageService.readHistory()) || '{}'
             );
-            await this.storageService.storeHistory(message.data.toString());
-
-            const emails: gmail_v1.Schema$Message[] =
-              await this.messageService.getEmailsByHistoryId(lastHistory.historyId, 'me');
-
-            if (emails.length > 0) {
-              const emailContent = await this.messageService.getEmailContent(emails[0].id!);
-
-              if (emailContent != null) {
-                const { date, plainText } = emailContent;
-
-                LoggingService.logToFile(`Email Datetime: ${new Date(date).toLocaleString()}`);
-
-                const parsedData = JSON.parse(plainText); // Parse only once
-                LoggingService.logToFile(`Calling Webhook with ${JSON.stringify(parsedData)}`);
-
-                try {
-                  const response = await axios.post(env.WEBHOOK_URL, parsedData);
-                  // Handle successful webhook response (e.g., log the status)
-                  LoggingService.logToFile(`Webhook response: ${response.status}`);
-                } catch (webhookError) {
-                  if (axios.isAxiosError(webhookError)) {
-                    LoggingService.logToFile(
-                      `Webhook Error: ${webhookError.message}, ${webhookError.response?.status}`
-                    );
-                    // Handle webhook error (retry, store message, etc.)
-                  } else {
-                    LoggingService.logToFile(`Webhook Error: ${webhookError as Error}`);
-                  }
-                }
-              }
-            }
+            await this.storageService.storeHistory(messageData);
+            await this.getAndProcessEmails(lastHistory, env);
           } catch (storageError) {
             LoggingService.logToFile(`Storage Error: ${(storageError as Error).message}`);
           }
         } catch (error) {
           LoggingService.logToFile(`Error in message handler: ${(error as Error).message}`, true);
         } finally {
-          message.ack();
+          message.ack(); // Acknowledge the message regardless of errors
         }
-      });
+      };
+
+      subscription.on('message', messageHandler); // Use named function
 
       subscription.on('error', (error: Error) => {
         LoggingService.logToFile(`Subscription Error: ${error.message}`);
@@ -120,6 +88,84 @@ export class PubSubSubscriber {
         LoggingService.logToFile(`Error initializing PubSub client: ${error.message}`);
       }
       process.exit(1);
+    }
+  }
+
+  private async processEmail(
+    email: gmail_v1.Schema$Message,
+    env: EnvironmentVariables
+  ): Promise<void> {
+    try {
+      const internalDate = parseInt(email.internalDate || '0', 10);
+
+      // Early exit if the email is older than 5 minutes
+      if (internalDate < Date.now() - 300000) {
+        // 300000 milliseconds = 5 minutes
+        return;
+      }
+
+      const emailContent = await this.messageService.getEmailContent(email.id!);
+      if (!emailContent) {
+        // Check for null or undefined
+        return;
+      }
+
+      const { date, plainText, sender } = emailContent;
+
+      // Early exit if sender is not from TradingView
+      if (!sender.includes('noreply@tradingview.com')) {
+        return;
+      }
+
+      const emailDate = new Date(date); // Create Date object once
+      LoggingService.logToFile(`Email Datetime: ${emailDate.toLocaleString()}`);
+
+      try {
+        const parsedData = JSON.parse(plainText);
+        LoggingService.logToFile(`Calling Webhook with ${JSON.stringify(parsedData)}`);
+
+        const response = await axios.post(env.WEBHOOK_URL, parsedData);
+        LoggingService.logToFile(`Webhook response: ${response.status}`);
+      } catch (parseError) {
+        LoggingService.logToFile(`Error parsing email content: ${(parseError as Error).message}`);
+        // Consider other error handling here, like retrying or skipping
+      }
+    } catch (error) {
+      LoggingService.logToFile(`Error processing email: ${(error as Error).message}`); // More specific message
+    }
+  }
+
+  private async getAndProcessEmails(
+    lastHistory: StorageData,
+    env: EnvironmentVariables
+  ): Promise<void> {
+    try {
+      const emails: gmail_v1.Schema$Message[] = await this.messageService.getEmailsByHistoryId(
+        lastHistory.historyId,
+        'me'
+      );
+
+      if (emails.length === 0) return;
+
+      emails.sort((a, b) => {
+        const aDate = parseInt(a.internalDate || '0', 10);
+        const bDate = parseInt(b.internalDate || '0', 10);
+        return aDate - bDate;
+      });
+
+      // Process each email
+      for (const email of emails) {
+        try {
+          await this.processEmail(email, env);
+        } catch (processError) {
+          // Log the error for the specific email, but continue processing others
+          LoggingService.logToFile(
+            `Error processing email ${email.id}: ${(processError as Error).message}`
+          );
+        }
+      }
+    } catch (error) {
+      LoggingService.logToFile(`Error getting or processing emails: ${(error as Error).message}`);
     }
   }
 }

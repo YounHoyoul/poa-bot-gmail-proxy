@@ -24,43 +24,21 @@ export class PubSubSubscriber {
     async initialize() {
         try {
             const env = process.env;
-            const pubSubConfig = {
+            const pubSubClient = new PubSub({
                 projectId: env.PROJECT_ID,
                 keyFilename: env.SUBSCRIPTION_CREDENTIALS_PATH,
-            };
-            const pubSubClient = new PubSub(pubSubConfig);
+            });
             const subscription = pubSubClient.subscription(env.SUBSCRIPTION_NAME);
-            subscription.on('message', async (message) => {
+            const messageHandler = async (message) => {
+                // Type the message
                 try {
                     LoggingService.logToFile(`Received message: ${message.id}`);
-                    LoggingService.logToFile(`Data: ${message.data.toString()}`);
+                    const messageData = message.data.toString(); // Extract data once
+                    LoggingService.logToFile(`Data: ${messageData}`);
                     try {
                         const lastHistory = JSON.parse((await this.storageService.readHistory()) || '{}');
-                        await this.storageService.storeHistory(message.data.toString());
-                        const emails = await this.messageService.getEmailsByHistoryId(lastHistory.historyId, 'me');
-                        if (emails.length > 0) {
-                            const emailContent = await this.messageService.getEmailContent(emails[0].id);
-                            if (emailContent != null) {
-                                const { date, plainText } = emailContent;
-                                LoggingService.logToFile(`Email Datetime: ${new Date(date).toLocaleString()}`);
-                                const parsedData = JSON.parse(plainText); // Parse only once
-                                LoggingService.logToFile(`Calling Webhook with ${JSON.stringify(parsedData)}`);
-                                try {
-                                    const response = await axios.post(env.WEBHOOK_URL, parsedData);
-                                    // Handle successful webhook response (e.g., log the status)
-                                    LoggingService.logToFile(`Webhook response: ${response.status}`);
-                                }
-                                catch (webhookError) {
-                                    if (axios.isAxiosError(webhookError)) {
-                                        LoggingService.logToFile(`Webhook Error: ${webhookError.message}, ${webhookError.response?.status}`);
-                                        // Handle webhook error (retry, store message, etc.)
-                                    }
-                                    else {
-                                        LoggingService.logToFile(`Webhook Error: ${webhookError}`);
-                                    }
-                                }
-                            }
-                        }
+                        await this.storageService.storeHistory(messageData);
+                        await this.getAndProcessEmails(lastHistory, env);
                     }
                     catch (storageError) {
                         LoggingService.logToFile(`Storage Error: ${storageError.message}`);
@@ -70,9 +48,10 @@ export class PubSubSubscriber {
                     LoggingService.logToFile(`Error in message handler: ${error.message}`, true);
                 }
                 finally {
-                    message.ack();
+                    message.ack(); // Acknowledge the message regardless of errors
                 }
-            });
+            };
+            subscription.on('message', messageHandler); // Use named function
             subscription.on('error', (error) => {
                 LoggingService.logToFile(`Subscription Error: ${error.message}`);
             });
@@ -83,6 +62,66 @@ export class PubSubSubscriber {
                 LoggingService.logToFile(`Error initializing PubSub client: ${error.message}`);
             }
             process.exit(1);
+        }
+    }
+    async processEmail(email, env) {
+        try {
+            const internalDate = parseInt(email.internalDate || '0', 10);
+            // Early exit if the email is older than 5 minutes
+            if (internalDate < Date.now() - 300000) {
+                // 300000 milliseconds = 5 minutes
+                return;
+            }
+            const emailContent = await this.messageService.getEmailContent(email.id);
+            if (!emailContent) {
+                // Check for null or undefined
+                return;
+            }
+            const { date, plainText, sender } = emailContent;
+            // Early exit if sender is not from TradingView
+            if (!sender.includes('noreply@tradingview.com')) {
+                return;
+            }
+            const emailDate = new Date(date); // Create Date object once
+            LoggingService.logToFile(`Email Datetime: ${emailDate.toLocaleString()}`);
+            try {
+                const parsedData = JSON.parse(plainText);
+                LoggingService.logToFile(`Calling Webhook with ${JSON.stringify(parsedData)}`);
+                const response = await axios.post(env.WEBHOOK_URL, parsedData);
+                LoggingService.logToFile(`Webhook response: ${response.status}`);
+            }
+            catch (parseError) {
+                LoggingService.logToFile(`Error parsing email content: ${parseError.message}`);
+                // Consider other error handling here, like retrying or skipping
+            }
+        }
+        catch (error) {
+            LoggingService.logToFile(`Error processing email: ${error.message}`); // More specific message
+        }
+    }
+    async getAndProcessEmails(lastHistory, env) {
+        try {
+            const emails = await this.messageService.getEmailsByHistoryId(lastHistory.historyId, 'me');
+            if (emails.length === 0)
+                return;
+            emails.sort((a, b) => {
+                const aDate = parseInt(a.internalDate || '0', 10);
+                const bDate = parseInt(b.internalDate || '0', 10);
+                return aDate - bDate;
+            });
+            // Process each email
+            for (const email of emails) {
+                try {
+                    await this.processEmail(email, env);
+                }
+                catch (processError) {
+                    // Log the error for the specific email, but continue processing others
+                    LoggingService.logToFile(`Error processing email ${email.id}: ${processError.message}`);
+                }
+            }
+        }
+        catch (error) {
+            LoggingService.logToFile(`Error getting or processing emails: ${error.message}`);
         }
     }
 }

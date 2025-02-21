@@ -1,5 +1,5 @@
-src/credentials
+credentials
 .env
-src/storage
+storage
 node_modules
-
+strategy

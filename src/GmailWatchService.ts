@@ -49,9 +49,11 @@ export class GmailWatchService {
         }
         writeFileSync(env.STORAGE_PATH, JSON.stringify(res), 'utf8'); // Add 'utf8' encoding
       } catch (writeError) {
-        LoggingService.logToFile(`Error writing to storage file: ${(writeError as Error).message}`, true);
+        LoggingService.logToFile(
+          `Error writing to storage file: ${(writeError as Error).message}`,
+          true
+        );
       }
-
     } catch (error) {
       LoggingService.logToFile(`Error setting up Gmail watch: ${(error as Error).message}`, true);
     }

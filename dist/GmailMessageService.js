@@ -6,6 +6,7 @@ export class GmailMessageService {
         this.gmail = google.gmail({ version: 'v1', auth });
     }
     async getEmailsByHistoryId(historyId, userId = 'me') {
+        // Original return type
         try {
             const historyResponse = await this.gmail.users.history.list({
                 userId,

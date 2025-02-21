@@ -20,7 +20,8 @@ export class GmailMessageService {
   async getEmailsByHistoryId(
     historyId: string,
     userId: string = 'me'
-  ): Promise<gmail_v1.Schema$Message[]> { // Original return type
+  ): Promise<gmail_v1.Schema$Message[]> {
+    // Original return type
     try {
       const historyResponse = await this.gmail.users.history.list({
         userId,

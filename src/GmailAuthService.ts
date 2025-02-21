@@ -82,9 +82,7 @@ export class GmailAuthService {
         throw new Error('Credentials file not found.');
       }
 
-      const credentials: GoogleCredentials = JSON.parse(
-        readFileSync(env.CREDENTIALS_PATH, 'utf8')
-      );
+      const credentials: GoogleCredentials = JSON.parse(readFileSync(env.CREDENTIALS_PATH, 'utf8'));
       const { client_secret, client_id, redirect_uris } = credentials.installed;
       const oAuth2Client: OAuth2Client = new google.auth.OAuth2(
         client_id,
@@ -93,7 +91,7 @@ export class GmailAuthService {
       );
 
       if (!isNewToken) {
-        if (!env.TOKEN_PATH ||!existsSync(env.TOKEN_PATH)) {
+        if (!env.TOKEN_PATH || !existsSync(env.TOKEN_PATH)) {
           throw new Error('Missing or invalid token file.');
         }
         const token: Credentials = JSON.parse(readFileSync(env.TOKEN_PATH, 'utf8'));

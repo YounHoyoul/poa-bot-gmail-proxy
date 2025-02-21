@@ -48,16 +48,34 @@ This is to connect from TradingViewer to Binance.
     - Name the app
     - Click Create
     - Move to the detail of the OAuth client ID
-    - Download the credentials.json file
+    - Download the JSON file as the credentials.json file
 - Create a service account
     - Move to "IAM & Admin"
     - Move to Service Accounts
     - Click Create Service Account
     - Fill in the form
-        - Service account name
+        - Service account name. e.g) Gmail PubSub
         - Service account ID  
         - Seervice account description
         - Give the permissions to the service account
+    - Move To Keys
+    - Click Add Key
+    - Download the JSON file as subscriber-credentials.json
+- Assign the service account to permissions
+    - Move to "IAM & Admin"
+    - Move to IAM
+    - Click Pencil (Edit Principals)
+    - Add Roles
+        - Pub/Sub Editor
+        - Pub/Sub Subscriber
+- Add Principals to subscriptions
+    - Move to "Pub/Sub"
+    - Move to Subscriptions
+    - Click Pencil and open view permissions
+    - Click Add Principal button
+        - Fill in the form
+        - Principal : ********-compute@developer.gserviceaccount.com
+        - Role : Editor
 
 # Steps to set up server/poabot.config
 - You need to set up Poabot templage (server/poabot.config)

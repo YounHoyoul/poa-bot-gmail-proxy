@@ -2,12 +2,62 @@ This project is inspried by the following project:
 - https://github.com/YounHoyoul/poa-bot-gmail-proxy.git
 
 This is to connect from TradingViewer to Binance.
-    - TradingView
-    - Gmail
-    - Proxy Server / POA Bot
-    - Binance or other exchange
+- TradingView
+- Gmail
+- Proxy Server / POA Bot
+- Binance or other exchange
 
 # Setup Google Cloud Platform
+- Create a project in Google Cloud Platform
+    - Copy the project ID and save .env file
+- Enable Gmail API
+    - Move to "APIs & Services"
+    - Move to Libraries
+    - Search for "Gmail API"
+    - Enable the API
+- Enalbe Pub/Sub API
+    - Move to "APIs & Services"
+    - Move to Libraries
+    - Search for "Pub/Sub API"
+    - Enable the API
+- Create Topic
+    - Move to "Pub/Sub"
+    - Click "Topic" menu
+    - Click "Create Topic"
+    - Fill in the form
+        - Topic name
+    - Copy Topic name and save .env file 
+- Create Subscription
+    - Move to "Pub/Sub"
+    - Click "Subscription" menu
+    - Click "Create Subscription"
+    - Fill in the form
+        - Subscription name
+        - Link to the topic
+    - Copy Subscription name and save .env file
+- Create OAuth consent screen
+    - Move to "APIs & Services"
+    - Move to OAuth Consent Screen
+    - Fill in the form
+        - Must upload a logo file, unless, you can't complete the process.
+    - Save
+- Create OAuth credentials
+    - Move to "APIs & Services"
+    - Click Create Credentials & Select OAuth client ID
+    - Select Desktop App
+    - Name the app
+    - Click Create
+    - Move to the detail of the OAuth client ID
+    - Download the credentials.json file
+- Create a service account
+    - Move to "IAM & Admin"
+    - Move to Service Accounts
+    - Click Create Service Account
+    - Fill in the form
+        - Service account name
+        - Service account ID  
+        - Seervice account description
+        - Give the permissions to the service account
 
 # Steps to set up server/poabot.config
 - You need to set up Poabot templage (server/poabot.config)
@@ -22,7 +72,7 @@ This is to connect from TradingViewer to Binance.
 - In order to get token.json, you need to run the following command:
     - npm run server
     - npm run token
-- You can follow the instructions in the terminal.
+    - When you get the toke in the web page, you can copy the token and paste it in the command line.
 - After you generate token.json, you need to update server/poabot.config with the token.json file.
     - path: /root/.token.json
 - You need to update `path: /root/.env.proxy`

@@ -23,8 +23,7 @@ export class StorageService {
       return null;
     }
     try {
-      const data = readFileSync(this.storagePath, 'utf8');
-      return data;
+      return readFileSync(this.storagePath, 'utf8');
     } catch (error) {
       LoggingService.logToFile(`Error reading watch response: ${(error as Error).message}`, true);
       return null;
@@ -48,7 +47,7 @@ export class StorageService {
         mkdirSync(storageDir, { recursive: true });
         LoggingService.logToFile(`Storage directory created: ${storageDir}`);
       }
-      writeFileSync(this.storagePath, JSON.stringify(response, null, 2), 'utf8'); // Stringify with indentation
+      writeFileSync(this.storagePath, response, 'utf8'); // Stringify with indentation
     } catch (writeError) {
       LoggingService.logToFile(
         `Error writing to storage file: ${(writeError as Error).message}`,

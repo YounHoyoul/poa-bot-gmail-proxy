@@ -5,12 +5,16 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "watch": "node ./src/command/watch.js",
-    "stop": "node ./src/command/stop.js",
-    "token": "node ./src/command/token.js",
-    "listen": "node ./src/command/subscriber.js",
-    "server": "node ./src/command/server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "tsc",
+    "watch": "node dist/command/watch.js",
+    "stop": "node dist/command/stop.js",
+    "token": "node dist/command/token.js",
+    "listen": "node dist/command/subscriber.js",
+    "server": "node dist/command/server.js",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "lint": "eslint \"src/**/*.{js,jsx,ts,tsx}\"",
+    "lint:fix": "eslint \"src/**/*.{js,jsx,ts,tsx}\" --fix",
+    "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx}\""
   },
   "author": "",
   "license": "ISC",
@@ -21,5 +25,18 @@
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "googleapis": "^144.0.0"
+  },
+  "devDependencies": {
+    "@types/date-fns": "^2.6.3",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.13.4",
+    "@typescript-eslint/eslint-plugin": "^8.24.1",
+    "@typescript-eslint/parser": "^8.24.1",
+    "eslint": "^9.20.1",
+    "eslint-config-prettier": "^10.0.1",
+    "eslint-plugin-prettier": "^5.2.3",
+    "prettier": "^3.5.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.3"
   }
 }

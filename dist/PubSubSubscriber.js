@@ -2,19 +2,20 @@ import 'dotenv/config';
 import axios from 'axios';
 import { PubSub } from '@google-cloud/pubsub';
 import { LoggingService } from './LoggingService.js';
-import { writeFileSync, readFileSync, existsSync } from 'fs';
 export class PubSubSubscriber {
     messageService;
-    constructor(messageService) {
+    storageService;
+    constructor(messageService, storageService) {
         this.validateEnvironmentVars();
         this.messageService = messageService;
+        this.storageService = storageService;
     }
     validateEnvironmentVars() {
         const env = process.env;
         if (!env.PROJECT_ID ||
             !env.SUBSCRIPTION_CREDENTIALS_PATH ||
             !env.SUBSCRIPTION_NAME ||
-            !env.STORAGE_PATH || // Validate STORAGE_PATH
+            !env.STORAGE_PATH ||
             !env.WEBHOOK_URL) {
             LoggingService.logToFile('Error: Missing required environment variables.', true);
             process.exit(1);
@@ -33,14 +34,9 @@ export class PubSubSubscriber {
                 try {
                     LoggingService.logToFile(`Received message: ${message.id}`);
                     LoggingService.logToFile(`Data: ${message.data.toString()}`);
-                    // Storage Handling with Error Handling
                     try {
-                        if (!existsSync(env.STORAGE_PATH)) {
-                            console.warn('Storage file does not exist, creating a new one.');
-                            writeFileSync(env.STORAGE_PATH, JSON.stringify({ historyId: '0' }));
-                        }
-                        const lastHistory = JSON.parse(readFileSync(env.STORAGE_PATH, 'utf8'));
-                        writeFileSync(env.STORAGE_PATH, message.data.toString()); // Consider atomicity here
+                        const lastHistory = JSON.parse((await this.storageService.readHistory()) || '{}');
+                        await this.storageService.storeHistory(message.data.toString());
                         const emails = await this.messageService.getEmailsByHistoryId(lastHistory.historyId, 'me');
                         if (emails.length > 0) {
                             const emailContent = await this.messageService.getEmailContent(emails[0].id);

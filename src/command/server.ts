@@ -1,9 +1,10 @@
-import express from 'express';
+import express, { Request, Response } from 'express';
+
 const app = express();
-const port = 3000;
+const port: number = 3000;
 
 // Basic route to handle the callback URL
-app.get('/oauth2callback', (req, res) => {
+app.get('/oauth2callback', (req: Request, res: Response): void => {
   // Example: Capture a query parameter 'code' from the callback
   const { code } = req.query;
 
@@ -15,6 +16,6 @@ app.get('/oauth2callback', (req, res) => {
 });
 
 // Start the server
-app.listen(port, () => {
+app.listen(port, (): void => {
   console.log(`Server running at http://localhost:${port}`);
 });

@@ -5,6 +5,7 @@ import { format } from 'date-fns';
 import path from 'path';
 import winston, { createLogger, transports } from 'winston';
 import { Logging } from '@google-cloud/logging';
+import axios from 'axios';
 export var LogLevel;
 (function (LogLevel) {
     LogLevel["DEBUG"] = "debug";
@@ -17,6 +18,7 @@ export class LoggingService {
     static DEFAULT_LOG_PATH = './logs/app.log';
     static DEFAULT_LEVEL = LogLevel.INFO;
     static SERVICE_NAME = 'GmailService';
+    static DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
     static logger;
     static cloudLogger;
     constructor() {
@@ -71,6 +73,23 @@ export class LoggingService {
             console.error('Failed to send log to Google Cloud Logging:', error);
         }
     }
+    static async sendToDiscord(level, message, meta = {}) {
+        if (!LoggingService.DISCORD_WEBHOOK_URL)
+            return; // Skip if URL is not set
+        if (level === LogLevel.ERROR || level === LogLevel.FATAL) {
+            const payload = {
+                content: `**${level.toUpperCase()}**: ${message}\n` +
+                    (meta.error ? `\`\`\`\n${meta.error}\n\`\`\`` : ''),
+                username: 'Log Bot',
+            };
+            try {
+                await axios.post(LoggingService.DISCORD_WEBHOOK_URL, payload);
+            }
+            catch (error) {
+                console.error('Failed to send message to Discord:', error);
+            }
+        }
+    }
     static async log(level, message, meta = {}) {
         if (!LoggingService.logger) {
             LoggingService.initializeLogger();
@@ -85,6 +104,8 @@ export class LoggingService {
         LoggingService.logger.log(level, message, logEntry);
         // Send to Google Cloud Logging asynchronously
         await this.sendToCloud(level, message, meta);
+        // Send to Discord if error or fatal
+        await this.sendToDiscord(level, message, meta);
     }
     static async debug(message, meta = {}) {
         await this.log(LogLevel.DEBUG, message, meta);

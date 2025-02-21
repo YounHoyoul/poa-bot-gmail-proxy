@@ -1,3 +1,12 @@
+This project is inspried by the following project:
+- https://github.com/YounHoyoul/poa-bot-gmail-proxy.git
+
+This is to connect from TradingViewer to Binance.
+    - TradingView
+    - Gmail
+    - Proxy Server / POA Bot
+    - Binance or other exchange
+
 # Setup Google Cloud Platform
 
 # Steps to set up server/poabot.config

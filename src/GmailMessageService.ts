@@ -1,5 +1,5 @@
 import { google, gmail_v1 } from 'googleapis';
-import { LoggingService } from './LoggingService.js';
+import { LoggingService } from './LoggingService.js'; // Updated import
 import { OAuth2Client } from 'google-auth-library';
 
 export interface EmailContent {
@@ -11,93 +11,118 @@ export interface EmailContent {
 }
 
 export class GmailMessageService {
-  private gmail: gmail_v1.Gmail;
+  private readonly gmail: gmail_v1.Gmail;
 
   constructor(auth: OAuth2Client) {
     this.gmail = google.gmail({ version: 'v1', auth });
   }
 
-  async getEmailsByHistoryId(
-    historyId: string,
-    userId: string = 'me'
-  ): Promise<gmail_v1.Schema$Message[]> {
-    // Original return type
+  async getEmailsByHistoryId(historyId: string, userId = 'me'): Promise<gmail_v1.Schema$Message[]> {
     try {
       const historyResponse = await this.gmail.users.history.list({
         userId,
         startHistoryId: historyId,
       });
 
-      if (!historyResponse.data.history) {
-        LoggingService.logToFile('No new emails found for the given historyId.');
+      const messages =
+        historyResponse.data.history
+          ?.flatMap((h) => h.messages ?? [])
+          .map((m) => m.id)
+          .filter((id): id is string => !!id) ?? [];
+
+      if (!messages.length) {
+        LoggingService.info('No new emails found', {
+          component: 'GmailMessageService',
+          historyId,
+          userId,
+        });
         return [];
       }
 
-      const messageIds: string[] = historyResponse.data.history
-        .flatMap((h) => h.messages || [])
-        .map((m) => m.id as string);
-
-      if (messageIds.length === 0) {
-        LoggingService.logToFile('No new emails found.');
-        return [];
-      }
-
-      return await Promise.all(
-        messageIds.map(async (messageId: string) => {
-          const message = await this.gmail.users.messages.get({ userId, id: messageId });
-          return message.data as gmail_v1.Schema$Message; // Type assertion
-        })
+      const fetchedMessages = await Promise.all(
+        messages.map((id) => this.gmail.users.messages.get({ userId, id }).then((res) => res.data))
       );
+
+      LoggingService.info(`Fetched ${fetchedMessages.length} emails by history ID`, {
+        component: 'GmailMessageService',
+        historyId,
+        userId,
+        messageCount: fetchedMessages.length,
+      });
+
+      return fetchedMessages;
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      LoggingService.logToFile(`Error fetching emails: ${errorMessage}`, true);
-      return [];
+      const errorStack = error instanceof Error ? error : undefined;
+      LoggingService.error(`Failed to fetch emails: ${errorMessage}`, errorStack, {
+        component: 'GmailMessageService',
+        historyId,
+        userId,
+      });
+      throw error; // Propagate error for proper handling
     }
   }
 
-  async getEmailContent(messageId: string): Promise<EmailContent | null> {
+  async getEmailContent(messageId: string): Promise<EmailContent> {
     try {
-      const response = await this.gmail.users.messages.get({
+      const { data: message } = await this.gmail.users.messages.get({
         userId: 'me',
         id: messageId,
       });
 
-      const message = response.data;
-
-      if (!message.payload || !message.payload.headers) {
-        throw new Error('Invalid email format.');
+      if (!message.payload?.headers) {
+        const errorMessage = `Invalid email format for message ${messageId}`;
+        LoggingService.error(errorMessage, undefined, {
+          component: 'GmailMessageService',
+          messageId,
+        });
+        throw new Error(errorMessage);
       }
 
       const headers = message.payload.headers;
-      const subject = headers.find((header) => header.name === 'Subject')?.value || 'No Subject';
-      const sender = headers.find((header) => header.name === 'From')?.value || 'Unknown Sender';
-      const date = headers.find((header) => header.name === 'Date')?.value || 'Unknown Date';
+      const getHeader = (name: string) => headers.find((h) => h.name === name)?.value ?? '';
+      const decodeBody = (data?: string | null | undefined) =>
+        data ? Buffer.from(data, 'base64').toString('utf8') : '';
 
       let plainText = '';
-      let htmlContent = '';
-
-      const getPartContent = (part: gmail_v1.Schema$MessagePart): string => {
-        if (part.mimeType === 'text/plain' && part.body?.data) {
-          return Buffer.from(part.body.data, 'base64').toString('utf-8');
-        } else if (part.mimeType === 'text/html' && part.body?.data) {
-          return Buffer.from(part.body.data, 'base64').toString('utf-8');
-        } else if (part.parts) {
-          return part.parts.map(getPartContent).join(''); // Recursively handle nested parts
-        }
-        return '';
+      const processPart = (part?: gmail_v1.Schema$MessagePart): string => {
+        if (!part) return '';
+        if (part.mimeType === 'text/plain') return decodeBody(part.body?.data);
+        if (part.mimeType === 'text/html') return decodeBody(part.body?.data);
+        return part.parts?.map(processPart).join('') ?? '';
       };
 
-      if (message.payload.parts) {
-        plainText = message.payload.parts.map(getPartContent).join('');
-      } else if (message.payload.body?.data) {
-        plainText = Buffer.from(message.payload.body.data, 'base64').toString('utf-8');
-      }
+      plainText =
+        message.payload.parts?.map(processPart).join('') ?? decodeBody(message.payload.body?.data);
 
-      return { sender, date, subject, plainText, htmlContent };
+      const emailContent: EmailContent = {
+        sender: getHeader('From'),
+        date: getHeader('Date'),
+        subject: getHeader('Subject'),
+        plainText,
+        htmlContent: '',
+      };
+
+      LoggingService.info(`Fetched email content for message ${messageId}`, {
+        component: 'GmailMessageService',
+        messageId,
+        sender: emailContent.sender,
+        subject: emailContent.subject,
+      });
+
+      return emailContent;
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      LoggingService.logToFile(`Error fetching email content: ${errorMessage}`, true);
-      return null;
+      const errorStack = error instanceof Error ? error : undefined;
+      LoggingService.error(
+        `Failed to fetch email content for ${messageId}: ${errorMessage}`,
+        errorStack,
+        {
+          component: 'GmailMessageService',
+          messageId,
+        }
+      );
+      throw error;
     }
   }
 }

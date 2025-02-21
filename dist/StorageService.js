@@ -3,50 +3,67 @@ import { LoggingService } from './LoggingService.js';
 import 'dotenv/config';
 import path from 'path';
 export class StorageService {
-    storagePath; // Make storagePath optional
-    constructor() {
-        this.storagePath = process.env.STORAGE_PATH; // Initialize in constructor
-        if (!this.storagePath) {
-            LoggingService.logToFile('STORAGE_PATH is not set in environment variables.', true);
-            // Consider if you want to throw an error here to halt execution
-            // or handle it gracefully later.  If you don't throw, be prepared
-            // to handle the undefined storagePath in your methods.
-            // throw new Error('STORAGE_PATH is not set in environment variables.');
+    storagePath;
+    constructor(storagePath = process.env.STORAGE_PATH ?? './storage/history.json') {
+        this.storagePath = storagePath;
+        this.ensureStorageDirectory();
+    }
+    ensureStorageDirectory() {
+        const storageDir = path.dirname(this.storagePath);
+        if (!existsSync(storageDir)) {
+            try {
+                mkdirSync(storageDir, { recursive: true });
+                LoggingService.info(`Created storage directory: ${storageDir}`, {
+                    component: 'StorageService',
+                });
+            }
+            catch (error) {
+                // Type 'unknown' from catch, assert or check as Error
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                const errorStack = error instanceof Error ? error : undefined;
+                LoggingService.error(`Failed to create storage directory: ${errorMessage}`, errorStack, {
+                    component: 'StorageService',
+                    storagePath: this.storagePath,
+                });
+                throw error;
+            }
         }
     }
     async readHistory() {
-        if (!this.storagePath) {
-            LoggingService.logToFile('Cannot read watch response: STORAGE_PATH is not defined.', true);
-            return null;
-        }
         try {
-            return readFileSync(this.storagePath, 'utf8');
+            const content = existsSync(this.storagePath) ? readFileSync(this.storagePath, 'utf8') : '{}';
+            LoggingService.debug(`Read history from ${this.storagePath}`, {
+                component: 'StorageService',
+                length: content.length,
+            });
+            return content;
         }
         catch (error) {
-            LoggingService.logToFile(`Error reading watch response: ${error.message}`, true);
-            return null;
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            const errorStack = error instanceof Error ? error : undefined;
+            LoggingService.error(`Failed to read history from ${this.storagePath}: ${errorMessage}`, errorStack, {
+                component: 'StorageService',
+                storagePath: this.storagePath,
+            });
+            throw error;
         }
     }
     async storeHistory(response) {
-        // Accept any type for response
-        if (!this.storagePath) {
-            // Handle the case where storagePath is not defined.
-            // E.g., log a message, throw an error, or skip storing.
-            LoggingService.logToFile('Cannot store watch response: STORAGE_PATH is not defined.', true);
-            return; // Or throw an error if you want to stop execution
-            // throw new Error('STORAGE_PATH is not set in environment variables.');
-        }
         try {
-            const storageDir = path.dirname(this.storagePath);
-            if (!existsSync(storageDir)) {
-                mkdirSync(storageDir, { recursive: true });
-                LoggingService.logToFile(`Storage directory created: ${storageDir}`);
-            }
-            writeFileSync(this.storagePath, response, 'utf8'); // Stringify with indentation
+            writeFileSync(this.storagePath, response, 'utf8');
+            LoggingService.info(`Stored history to ${this.storagePath}`, {
+                component: 'StorageService',
+                size: response.length,
+            });
         }
-        catch (writeError) {
-            LoggingService.logToFile(`Error writing to storage file: ${writeError.message}`, true);
-            throw writeError; // Re-throw the error after logging it.  Important!
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            const errorStack = error instanceof Error ? error : undefined;
+            LoggingService.error(`Failed to store history to ${this.storagePath}: ${errorMessage}`, errorStack, {
+                component: 'StorageService',
+                storagePath: this.storagePath,
+            });
+            throw error;
         }
     }
 }

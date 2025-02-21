@@ -1,40 +1,62 @@
 import { google } from 'googleapis';
-import { LoggingService } from './LoggingService.js';
-import 'dotenv/config';
+import { LoggingService } from './LoggingService.js'; // Updated import
 export class GmailWatchService {
     gmail;
     storageService;
-    constructor(auth, storageService) {
+    topicName;
+    constructor(auth, storageService, topicName = process.env.TOPIC_NAME ?? '') {
         this.gmail = google.gmail({ version: 'v1', auth });
         this.storageService = storageService;
+        this.topicName = topicName;
+        if (!this.topicName) {
+            const errorMessage = 'TOPIC_NAME is not configured';
+            LoggingService.error(errorMessage, undefined, { component: 'GmailWatchService' });
+            throw new Error(errorMessage);
+        }
     }
     async watchGmail() {
-        const env = process.env;
         try {
-            if (!env.TOPIC_NAME) {
-                throw new Error('TOPIC_NAME is not set in environment variables.');
-            }
-            const res = (await this.gmail.users.watch({
+            const res = await this.gmail.users.watch({
                 userId: 'me',
                 requestBody: {
-                    topicName: env.TOPIC_NAME,
+                    topicName: this.topicName,
                     labelIds: ['INBOX'],
                 },
-            })).data;
-            LoggingService.logToFile(`Watch response: ${JSON.stringify(res)}`);
-            this.storageService.storeHistory(JSON.stringify(res));
+            });
+            const watchResponse = res.data;
+            LoggingService.info(`Watch response received`, {
+                component: 'GmailWatchService',
+                topicName: this.topicName,
+                response: JSON.stringify(watchResponse),
+            });
+            await this.storageService.storeHistory(JSON.stringify(watchResponse));
+            return watchResponse;
         }
         catch (error) {
-            LoggingService.logToFile(`Error setting up Gmail watch: ${error.message}`, true);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            const errorStack = error instanceof Error ? error : undefined;
+            LoggingService.error(`Failed to set up Gmail watch: ${errorMessage}`, errorStack, {
+                component: 'GmailWatchService',
+                topicName: this.topicName,
+            });
+            throw error;
         }
     }
     async stopWatch() {
         try {
             const res = await this.gmail.users.stop({ userId: 'me' });
-            LoggingService.logToFile(`Stopped Gmail watch: ${JSON.stringify(res.data)}`);
+            LoggingService.info(`Stopped Gmail watch`, {
+                component: 'GmailWatchService',
+                response: JSON.stringify(res.data),
+            });
         }
         catch (error) {
-            LoggingService.logToFile(`Error stopping Gmail watch: ${error.message}`, true);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            const errorStack = error instanceof Error ? error : undefined;
+            LoggingService.error(`Failed to stop Gmail watch: ${errorMessage}`, errorStack, {
+                component: 'GmailWatchService',
+            });
+            throw error;
         }
     }
 }

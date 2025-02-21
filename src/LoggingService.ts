@@ -1,22 +1,34 @@
 import 'dotenv/config';
-import { appendFileSync } from 'fs';
+import { appendFileSync, existsSync, mkdirSync } from 'fs';
 import { format } from 'date-fns';
+import path from 'path'; // Import the path module
 
 export class LoggingService {
   static logToFile(message: string, isError: boolean = false): void {
-    if (isError) {
-      console.error(message);
-    } else {
-      console.log(message);
-    }
-
     const timestamp: string = format(new Date(), 'yyyy-MM-dd HH:mm:ss');
     const logMessage: string = `[${timestamp}] ${message}\n`;
 
+    if (isError) {
+      console.error(logMessage.trim()); // Log to console with timestamp
+    } else {
+      console.log(logMessage.trim()); // Log to console with timestamp
+    }
+
     try {
-      appendFileSync(process.env.LOGGING_PATH!, logMessage, 'utf8');
+      const logFilePath = process.env.LOGGING_PATH!;
+
+      // Ensure directory exists
+      const logDir = path.dirname(logFilePath); // Extract the directory part
+      if (!existsSync(logDir)) {
+        mkdirSync(logDir, { recursive: true }); // Create the directory recursively
+        console.log(`Log directory created: ${logDir}`); // Optional: Log directory creation
+      }
+
+      appendFileSync(logFilePath, logMessage, 'utf8');
     } catch (error: unknown) {
       console.error('Error writing to log file:', error);
+      // If logging to file fails, you might want to consider a fallback
+      // like writing to a default log file or using a different logging mechanism.
     }
   }
 }

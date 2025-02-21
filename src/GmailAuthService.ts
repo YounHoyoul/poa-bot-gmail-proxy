@@ -1,16 +1,22 @@
-import { writeFileSync, readFileSync, existsSync } from 'fs';
+import { writeFileSync, readFileSync, existsSync, mkdirSync } from 'fs';
 import readline from 'readline';
 import { google } from 'googleapis';
 import { OAuth2Client, Credentials } from 'google-auth-library';
 import { LoggingService } from './LoggingService.js';
 import 'dotenv/config';
+import path from 'path';
 
 interface GoogleCredentials {
   installed: {
     client_secret: string;
     client_id: string;
-    redirect_uris: string[];
+    redirect_uris: string;
   };
+}
+
+interface EnvironmentVariables {
+  CREDENTIALS_PATH: string;
+  TOKEN_PATH: string;
 }
 
 export class GmailAuthService {
@@ -21,6 +27,8 @@ export class GmailAuthService {
   }
 
   async getNewToken(oAuth2Client: OAuth2Client): Promise<void> {
+    const env: EnvironmentVariables = process.env as unknown as EnvironmentVariables;
+
     try {
       const authUrl: string = oAuth2Client.generateAuthUrl({
         access_type: 'offline',
@@ -39,11 +47,18 @@ export class GmailAuthService {
           const { tokens }: { tokens: Credentials } = await oAuth2Client.getToken(code);
           oAuth2Client.setCredentials(tokens);
 
-          if (!process.env.TOKEN_PATH)
+          if (!env.TOKEN_PATH) {
             throw new Error('TOKEN_PATH is not set in environment variables.');
+          }
 
-          writeFileSync(process.env.TOKEN_PATH, JSON.stringify(tokens));
-          console.log('Token stored to', process.env.TOKEN_PATH);
+          // Ensure the directory for the token file exists
+          const tokenDir = path.dirname(env.TOKEN_PATH);
+          if (!existsSync(tokenDir)) {
+            mkdirSync(tokenDir, { recursive: true });
+          }
+
+          writeFileSync(env.TOKEN_PATH, JSON.stringify(tokens));
+          console.log('Token stored to', env.TOKEN_PATH);
         } catch (error) {
           console.error('Error while retrieving token:', (error as Error).message);
         } finally {
@@ -56,26 +71,32 @@ export class GmailAuthService {
   }
 
   getAuth2Client(isNewToken: boolean = false): OAuth2Client {
-    try {
-      if (!process.env.CREDENTIALS_PATH) throw new Error('CREDENTIALS_PATH is not set.');
+    const env: EnvironmentVariables = process.env as unknown as EnvironmentVariables;
 
-      if (!existsSync(process.env.CREDENTIALS_PATH)) throw new Error('Credentials file not found.');
+    try {
+      if (!env.CREDENTIALS_PATH) {
+        throw new Error('CREDENTIALS_PATH is not set.');
+      }
+
+      if (!existsSync(env.CREDENTIALS_PATH)) {
+        throw new Error('Credentials file not found.');
+      }
 
       const credentials: GoogleCredentials = JSON.parse(
-        readFileSync(process.env.CREDENTIALS_PATH, 'utf8')
+        readFileSync(env.CREDENTIALS_PATH, 'utf8')
       );
       const { client_secret, client_id, redirect_uris } = credentials.installed;
       const oAuth2Client: OAuth2Client = new google.auth.OAuth2(
         client_id,
         client_secret,
-        redirect_uris[0]
+        redirect_uris
       );
 
       if (!isNewToken) {
-        if (!process.env.TOKEN_PATH || !existsSync(process.env.TOKEN_PATH)) {
+        if (!env.TOKEN_PATH ||!existsSync(env.TOKEN_PATH)) {
           throw new Error('Missing or invalid token file.');
         }
-        const token: Credentials = JSON.parse(readFileSync(process.env.TOKEN_PATH, 'utf8'));
+        const token: Credentials = JSON.parse(readFileSync(env.TOKEN_PATH, 'utf8'));
         oAuth2Client.setCredentials(token);
       }
 

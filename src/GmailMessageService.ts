@@ -20,7 +20,7 @@ export class GmailMessageService {
   async getEmailsByHistoryId(
     historyId: string,
     userId: string = 'me'
-  ): Promise<gmail_v1.Schema$Message[]> {
+  ): Promise<gmail_v1.Schema$Message[]> { // Original return type
     try {
       const historyResponse = await this.gmail.users.history.list({
         userId,
@@ -44,7 +44,7 @@ export class GmailMessageService {
       return await Promise.all(
         messageIds.map(async (messageId: string) => {
           const message = await this.gmail.users.messages.get({ userId, id: messageId });
-          return message.data;
+          return message.data as gmail_v1.Schema$Message; // Type assertion
         })
       );
     } catch (error: unknown) {
@@ -53,6 +53,7 @@ export class GmailMessageService {
       return [];
     }
   }
+
   async getEmailContent(messageId: string): Promise<EmailContent | null> {
     try {
       const response = await this.gmail.users.messages.get({
@@ -74,14 +75,19 @@ export class GmailMessageService {
       let plainText = '';
       let htmlContent = '';
 
-      if (message.payload.parts) {
-        for (const part of message.payload.parts) {
-          if (part.mimeType === 'text/plain' && part.body?.data) {
-            plainText = Buffer.from(part.body.data, 'base64').toString('utf-8');
-          } else if (part.mimeType === 'text/html' && part.body?.data) {
-            htmlContent = Buffer.from(part.body.data, 'base64').toString('utf-8');
-          }
+      const getPartContent = (part: gmail_v1.Schema$MessagePart): string => {
+        if (part.mimeType === 'text/plain' && part.body?.data) {
+          return Buffer.from(part.body.data, 'base64').toString('utf-8');
+        } else if (part.mimeType === 'text/html' && part.body?.data) {
+          return Buffer.from(part.body.data, 'base64').toString('utf-8');
+        } else if (part.parts) {
+          return part.parts.map(getPartContent).join(''); // Recursively handle nested parts
         }
+        return '';
+      };
+
+      if (message.payload.parts) {
+        plainText = message.payload.parts.map(getPartContent).join('');
       } else if (message.payload.body?.data) {
         plainText = Buffer.from(message.payload.body.data, 'base64').toString('utf-8');
       }

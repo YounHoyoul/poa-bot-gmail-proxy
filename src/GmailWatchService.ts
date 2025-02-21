@@ -1,8 +1,14 @@
-import { writeFileSync } from 'fs';
+import { writeFileSync, existsSync, mkdirSync } from 'fs';
 import { google, gmail_v1 } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
 import { LoggingService } from './LoggingService.js';
 import 'dotenv/config';
+import path from 'path';
+
+interface EnvironmentVariables {
+  TOPIC_NAME: string;
+  STORAGE_PATH: string;
+}
 
 export class GmailWatchService {
   private gmail: gmail_v1.Gmail;
@@ -12,15 +18,18 @@ export class GmailWatchService {
   }
 
   async watchGmail(): Promise<void> {
+    const env: EnvironmentVariables = process.env as unknown as EnvironmentVariables;
+
     try {
-      if (!process.env.TOPIC_NAME)
+      if (!env.TOPIC_NAME) {
         throw new Error('TOPIC_NAME is not set in environment variables.');
+      }
 
       const res: gmail_v1.Schema$WatchResponse = (
         await this.gmail.users.watch({
           userId: 'me',
           requestBody: {
-            topicName: process.env.TOPIC_NAME,
+            topicName: env.TOPIC_NAME,
             labelIds: ['INBOX'],
           },
         })
@@ -28,10 +37,21 @@ export class GmailWatchService {
 
       LoggingService.logToFile(`Watch response: ${JSON.stringify(res)}`);
 
-      if (!process.env.STOAGE_PATH)
-        throw new Error('STOAGE_PATH is not set in environment variables.');
+      if (!env.STORAGE_PATH) {
+        throw new Error('STORAGE_PATH is not set in environment variables.');
+      }
 
-      writeFileSync(process.env.STOAGE_PATH, JSON.stringify(res));
+      try {
+        const storageDir = path.dirname(env.STORAGE_PATH);
+        if (!existsSync(storageDir)) {
+          mkdirSync(storageDir, { recursive: true });
+          LoggingService.logToFile(`Storage directory created: ${storageDir}`);
+        }
+        writeFileSync(env.STORAGE_PATH, JSON.stringify(res), 'utf8'); // Add 'utf8' encoding
+      } catch (writeError) {
+        LoggingService.logToFile(`Error writing to storage file: ${(writeError as Error).message}`, true);
+      }
+
     } catch (error) {
       LoggingService.logToFile(`Error setting up Gmail watch: ${(error as Error).message}`, true);
     }

@@ -24,7 +24,7 @@ export class GmailMessageService {
             }
             return await Promise.all(messageIds.map(async (messageId) => {
                 const message = await this.gmail.users.messages.get({ userId, id: messageId });
-                return message.data;
+                return message.data; // Type assertion
             }));
         }
         catch (error) {
@@ -49,15 +49,20 @@ export class GmailMessageService {
             const date = headers.find((header) => header.name === 'Date')?.value || 'Unknown Date';
             let plainText = '';
             let htmlContent = '';
-            if (message.payload.parts) {
-                for (const part of message.payload.parts) {
-                    if (part.mimeType === 'text/plain' && part.body?.data) {
-                        plainText = Buffer.from(part.body.data, 'base64').toString('utf-8');
-                    }
-                    else if (part.mimeType === 'text/html' && part.body?.data) {
-                        htmlContent = Buffer.from(part.body.data, 'base64').toString('utf-8');
-                    }
+            const getPartContent = (part) => {
+                if (part.mimeType === 'text/plain' && part.body?.data) {
+                    return Buffer.from(part.body.data, 'base64').toString('utf-8');
                 }
+                else if (part.mimeType === 'text/html' && part.body?.data) {
+                    return Buffer.from(part.body.data, 'base64').toString('utf-8');
+                }
+                else if (part.parts) {
+                    return part.parts.map(getPartContent).join(''); // Recursively handle nested parts
+                }
+                return '';
+            };
+            if (message.payload.parts) {
+                plainText = message.payload.parts.map(getPartContent).join('');
             }
             else if (message.payload.body?.data) {
                 plainText = Buffer.from(message.payload.body.data, 'base64').toString('utf-8');

@@ -19,6 +19,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@google-cloud/logging": "^11.2.0",
     "@google-cloud/pubsub": "^4.10.0",
     "axios": "^1.7.9",
     "date-fns": "^4.1.0",

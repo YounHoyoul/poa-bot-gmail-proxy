@@ -33,8 +33,8 @@ export class PubSubSubscriber {
   private validateConfig(): Config {
     const env = process.env;
     const required = [
-      'PROJECT_ID',
-      'SUBSCRIPTION_CREDENTIALS_PATH',
+      'GOOGLE_CLOUD_PROJECT',
+      'GOOGLE_APPLICATION_CREDENTIALS',
       'SUBSCRIPTION_NAME',
       'STORAGE_PATH',
       'WEBHOOK_URL',
@@ -48,8 +48,8 @@ export class PubSubSubscriber {
     }
 
     return {
-      projectId: env.PROJECT_ID!,
-      credentialsPath: env.SUBSCRIPTION_CREDENTIALS_PATH!,
+      projectId: env.GOOGLE_CLOUD_PROJECT!,
+      credentialsPath: env.GOOGLE_APPLICATION_CREDENTIALS!,
       subscriptionName: env.SUBSCRIPTION_NAME!,
       storagePath: env.STORAGE_PATH!,
       webhookUrl: env.WEBHOOK_URL!,

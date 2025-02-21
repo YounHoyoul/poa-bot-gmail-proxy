@@ -1,9 +1,10 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import 'dotenv/config';
 import { existsSync, mkdirSync } from 'fs';
 import { format } from 'date-fns';
 import path from 'path';
-import { createLogger, format as winstonFormat, transports } from 'winston';
-// Define log levels
+import winston, { createLogger, transports } from 'winston';
+import { Logging } from '@google-cloud/logging';
 export var LogLevel;
 (function (LogLevel) {
     LogLevel["DEBUG"] = "debug";
@@ -17,42 +18,60 @@ export class LoggingService {
     static DEFAULT_LEVEL = LogLevel.INFO;
     static SERVICE_NAME = 'GmailService';
     static logger;
+    static cloudLogger;
     constructor() {
-        if (!LoggingService.logger) {
+        if (!LoggingService.logger || !LoggingService.cloudLogger) {
             LoggingService.initializeLogger();
         }
     }
     static initializeLogger() {
         const logPath = process.env.LOGGING_PATH ?? LoggingService.DEFAULT_LOG_PATH;
         const logLevel = process.env.LOG_LEVEL ?? LoggingService.DEFAULT_LEVEL;
-        // Ensure log directory exists
+        const projectId = process.env.GOOGLE_CLOUD_PROJECT; // Set in .env
+        // Ensure local log directory exists
         const logDir = path.dirname(logPath);
         if (!existsSync(logDir)) {
             mkdirSync(logDir, { recursive: true });
         }
+        // Initialize Google Cloud Logging (requires GOOGLE_APPLICATION_CREDENTIALS env var or ADC)
+        LoggingService.cloudLogger = new Logging({ projectId });
         // Configure Winston logger
         LoggingService.logger = createLogger({
             level: logLevel,
-            format: winstonFormat.combine(winstonFormat.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }), winstonFormat.json(), // Structured JSON output
-            winstonFormat.errors({ stack: true }) // Include stack traces for errors
-            ),
+            format: winston.format.combine(winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }), winston.format.json(), winston.format.errors({ stack: true })),
             defaultMeta: { service: LoggingService.SERVICE_NAME },
             transports: [
-                new transports.Console(), // Log to console
+                new transports.Console(),
                 new transports.File({
                     filename: logPath,
-                    maxsize: 5 * 1024 * 1024, // 5MB per file
-                    maxFiles: 5, // Keep 5 rotated files
-                    tailable: true, // Rotate logs
+                    maxsize: 5 * 1024 * 1024, // 5MB
+                    maxFiles: 5,
+                    tailable: true,
                 }),
             ],
         });
-        // Handle logging errors
         LoggingService.logger.on('error', (error) => {
-            console.error('Logging failed:', error); // Fallback to console
+            console.error('Local logging failed:', error); // Fallback to console
         });
     }
-    static log(level, message, meta = {}) {
+    static async sendToCloud(level, message, meta = {}) {
+        if (!LoggingService.cloudLogger)
+            return;
+        const log = LoggingService.cloudLogger.log('app_logs'); // Log name in Cloud Logging
+        const severity = level.toUpperCase();
+        const entry = log.entry({ severity, labels: { component: meta.component || 'unknown' } }, {
+            message,
+            timestamp: new Date().toISOString(),
+            ...meta,
+        });
+        try {
+            await log.write(entry);
+        }
+        catch (error) {
+            console.error('Failed to send log to Google Cloud Logging:', error);
+        }
+    }
+    static async log(level, message, meta = {}) {
         if (!LoggingService.logger) {
             LoggingService.initializeLogger();
         }
@@ -62,23 +81,25 @@ export class LoggingService {
             timestamp: format(new Date(), 'yyyy-MM-dd HH:mm:ss'),
             ...meta,
         };
+        // Log locally with Winston
         LoggingService.logger.log(level, message, logEntry);
+        // Send to Google Cloud Logging asynchronously
+        await this.sendToCloud(level, message, meta);
     }
-    // Convenience methods
-    static debug(message, meta = {}) {
-        this.log(LogLevel.DEBUG, message, meta);
+    static async debug(message, meta = {}) {
+        await this.log(LogLevel.DEBUG, message, meta);
     }
-    static info(message, meta = {}) {
-        this.log(LogLevel.INFO, message, meta);
+    static async info(message, meta = {}) {
+        await this.log(LogLevel.INFO, message, meta);
     }
-    static warn(message, meta = {}) {
-        this.log(LogLevel.WARN, message, meta);
+    static async warn(message, meta = {}) {
+        await this.log(LogLevel.WARN, message, meta);
     }
-    static error(message, error, meta = {}) {
-        this.log(LogLevel.ERROR, message, { ...meta, error: error?.stack });
+    static async error(message, error, meta = {}) {
+        await this.log(LogLevel.ERROR, message, { ...meta, error: error?.stack });
     }
-    static fatal(message, error, meta = {}) {
-        this.log(LogLevel.FATAL, message, { ...meta, error: error?.stack });
-        process.exit(1); // Exit on fatal errors
+    static async fatal(message, error, meta = {}) {
+        await this.log(LogLevel.FATAL, message, { ...meta, error: error?.stack });
+        process.exit(1);
     }
 }

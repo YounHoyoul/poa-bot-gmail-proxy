@@ -117,8 +117,8 @@ export class PubSubSubscriber {
             const messageData = JSON.parse(message.data.toString());
             // Extract historyId from the object (assuming it always has historyId)
             const historyId = messageData.historyId;
-            if (typeof historyId !== 'string') {
-                throw new Error('historyId must be a string');
+            if (historyId == '') {
+                throw new Error('historyId must not be empty.');
             }
             // Get the last history ID
             const lastHistoryId = await this.storageService.getHistoryId();

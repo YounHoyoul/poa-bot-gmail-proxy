@@ -152,8 +152,8 @@ export class PubSubSubscriber {
 
       // Extract historyId from the object (assuming it always has historyId)
       const historyId = messageData.historyId as string;
-      if (typeof historyId !== 'string') {
-        throw new Error('historyId must be a string');
+      if (historyId == '') {
+        throw new Error('historyId must not be empty.');
       }
 
       // Get the last history ID

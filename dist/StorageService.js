@@ -310,6 +310,12 @@ export class StorageService {
     async addProcessedEmailIds(emailId) {
         try {
             await this.db.read();
+            if (this.db.data.processedEmailIds == null) {
+                LoggingService.warn(`processedEmailIds was null or undefined, initializing to empty array`, {
+                    component: 'StorageService',
+                });
+                this.db.data.processedEmailIds = [];
+            }
             if (!this.db.data.processedEmailIds.includes(emailId)) {
                 this.db.data.processedEmailIds.push(emailId);
                 // Check if array exceeds 100 items
@@ -353,6 +359,13 @@ export class StorageService {
     async isEmailProcessed(emailId) {
         try {
             await this.db.read();
+            if (this.db.data.processedEmailIds == null) {
+                LoggingService.warn(`processedEmailIds was null or undefined, treating as empty`, {
+                    component: 'StorageService',
+                    emailId,
+                });
+                return false;
+            }
             const hasBeenProcessed = this.db.data.processedEmailIds.includes(emailId);
             LoggingService.debug(`Checked if email has been processed`, {
                 component: 'StorageService',

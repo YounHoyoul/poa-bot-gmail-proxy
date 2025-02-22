@@ -4,6 +4,7 @@ import { existsSync, mkdirSync } from 'fs';
 import { format } from 'date-fns';
 import path from 'path';
 import winston, { Logger, createLogger, transports } from 'winston';
+import DailyRotateFile from 'winston-daily-rotate-file';
 import { Logging } from '@google-cloud/logging';
 import axios from 'axios';
 
@@ -62,12 +63,12 @@ export class LoggingService {
       ),
       defaultMeta: { service: LoggingService.SERVICE_NAME },
       transports: [
-        new transports.Console(),
-        new transports.File({
-          filename: logPath,
-          maxsize: 5 * 1024 * 1024, // 5MB
-          maxFiles: 5,
-          tailable: true,
+        new transports.Console(), // Console output remains unchanged
+        new DailyRotateFile({     // Replace File with DailyRotateFile
+          filename: logPath,      // e.g., './logs/app-%DATE%.log'
+          datePattern: 'YYYY-MM-DD', // Rotate daily (e.g., app-2025-02-21.log)
+          maxSize: '5m',          // 5MB per file (optional, matches your original maxsize)
+          maxFiles: '14d',        // Keep logs for 14 days (adjustable)
         }),
       ],
     });
@@ -104,7 +105,7 @@ export class LoggingService {
     if (level === LogLevel.ERROR || level === LogLevel.FATAL) {
       const payload = {
         content: `**${level.toUpperCase()}**: ${message}\n` +
-                 (meta.error ? `\`\`\`\n${meta.error}\n\`\`\`` : ''),
+          (meta.error ? `\`\`\`\n${meta.error}\n\`\`\`` : ''),
         username: 'Log Bot',
       };
 

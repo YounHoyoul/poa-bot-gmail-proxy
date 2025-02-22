@@ -4,6 +4,7 @@ import { existsSync, mkdirSync } from 'fs';
 import { format } from 'date-fns';
 import path from 'path';
 import winston, { createLogger, transports } from 'winston';
+import DailyRotateFile from 'winston-daily-rotate-file';
 import { Logging } from '@google-cloud/logging';
 import axios from 'axios';
 export var LogLevel;
@@ -43,12 +44,12 @@ export class LoggingService {
             format: winston.format.combine(winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }), winston.format.json(), winston.format.errors({ stack: true })),
             defaultMeta: { service: LoggingService.SERVICE_NAME },
             transports: [
-                new transports.Console(),
-                new transports.File({
-                    filename: logPath,
-                    maxsize: 5 * 1024 * 1024, // 5MB
-                    maxFiles: 5,
-                    tailable: true,
+                new transports.Console(), // Console output remains unchanged
+                new DailyRotateFile({
+                    filename: logPath, // e.g., './logs/app-%DATE%.log'
+                    datePattern: 'YYYY-MM-DD', // Rotate daily (e.g., app-2025-02-21.log)
+                    maxSize: '5m', // 5MB per file (optional, matches your original maxsize)
+                    maxFiles: '14d', // Keep logs for 14 days (adjustable)
                 }),
             ],
         });

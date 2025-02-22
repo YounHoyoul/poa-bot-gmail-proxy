@@ -1,4 +1,5 @@
 import { google } from 'googleapis';
+import cron from 'node-cron';
 import { LoggingService } from './LoggingService.js'; // Updated import
 export class GmailWatchService {
     gmail;
@@ -14,16 +15,45 @@ export class GmailWatchService {
             throw new Error(errorMessage);
         }
     }
+    async startWatchWithRenewal() {
+        // Initial watch call
+        const watchResponse = await this.watchGmail();
+        // Schedule renewal every 6 days
+        cron.schedule('0 0 */6 * *', async () => {
+            try {
+                await this.watchGmail();
+                LoggingService.info('Gmail watch renewed successfully via cron', {
+                    component: 'GmailWatchService',
+                    topicName: this.topicName,
+                });
+            }
+            catch (error) {
+                LoggingService.error('Cron job failed to renew Gmail watch', error, {
+                    component: 'GmailWatchService',
+                    topicName: this.topicName,
+                });
+            }
+        }, {
+            timezone: 'UTC', // Adjust to your timezone, e.g., 'America/Los_Angeles'
+        });
+        LoggingService.info('Cron job scheduled for Gmail watch renewal every 6 days', {
+            component: 'GmailWatchService',
+            topicName: this.topicName,
+            expiration: watchResponse.expiration
+                ? new Date(parseInt(watchResponse.expiration)).toISOString()
+                : 'unknown',
+        });
+    }
     async watchGmail() {
         try {
-            const res = await this.gmail.users.watch({
+            const response = await this.gmail.users.watch({
                 userId: 'me',
                 requestBody: {
                     topicName: this.topicName,
                     labelIds: ['INBOX'],
                 },
             });
-            const watchResponse = res.data;
+            const watchResponse = response.data;
             LoggingService.info(`Watch response received`, {
                 component: 'GmailWatchService',
                 topicName: this.topicName,

@@ -35,7 +35,7 @@ export class StorageService {
   async readHistory(): Promise<string> {
     try {
       const content = existsSync(this.storagePath) ? readFileSync(this.storagePath, 'utf8') : '{}';
-      LoggingService.debug(`Read history from ${this.storagePath}`, {
+      LoggingService.debug(`Read history from ${this.storagePath} - ${content}`, {
         component: 'StorageService',
         length: content.length,
       });
@@ -55,12 +55,12 @@ export class StorageService {
     }
   }
 
-  async storeHistory(response: string): Promise<void> {
+  async storeHistory(content: string): Promise<void> {
     try {
-      writeFileSync(this.storagePath, response, 'utf8');
-      LoggingService.info(`Stored history to ${this.storagePath}`, {
+      writeFileSync(this.storagePath, content, 'utf8');
+      LoggingService.info(`Stored history to ${this.storagePath} - ${content}`, {
         component: 'StorageService',
-        size: response.length,
+        size: content.length,
       });
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);

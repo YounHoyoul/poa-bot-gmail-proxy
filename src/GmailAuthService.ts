@@ -15,7 +15,7 @@ interface GoogleCredentials {
 }
 
 export class GmailAuthService {
-  private readonly SCOPES = ['https://www.googleapis.com/auth/gmail.readonly'];
+  private readonly SCOPES = ['https://www.googleapis.com/auth/gmail.modify'];
   private readonly credentialsPath: string;
   private readonly tokenPath: string;
 

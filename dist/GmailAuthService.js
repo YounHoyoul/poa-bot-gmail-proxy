@@ -5,7 +5,7 @@ import { LoggingService } from './LoggingService.js'; // Updated import
 import 'dotenv/config';
 import path from 'path';
 export class GmailAuthService {
-    SCOPES = ['https://www.googleapis.com/auth/gmail.readonly'];
+    SCOPES = ['https://www.googleapis.com/auth/gmail.modify'];
     credentialsPath;
     tokenPath;
     constructor(credentialsPath = process.env.CREDENTIALS_PATH ?? '', tokenPath = process.env.TOKEN_PATH ?? '') {

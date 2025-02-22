@@ -16,6 +16,9 @@ interface Config {
   subscriptionName: string;
   storagePath: string;
   webhookUrl: string;
+  // New fields
+  action: 'move' | 'delete'; // Action to perform after processing
+  targetLabel?: string; // Target label name (required if action is 'move')
 }
 
 export class PubSubSubscriber {
@@ -23,6 +26,7 @@ export class PubSubSubscriber {
   private readonly storageService: StorageService;
   private readonly config: Config;
   private subscription?: Subscription;
+  private targetLabelId: string | null | undefined = null;
 
   constructor(messageService: GmailMessageService, storageService: StorageService) {
     this.config = this.validateConfig();
@@ -38,6 +42,7 @@ export class PubSubSubscriber {
       'SUBSCRIPTION_NAME',
       'STORAGE_PATH',
       'WEBHOOK_URL',
+      'ACTION' // New required field
     ];
     const missing = required.filter((key) => !env[key]);
 
@@ -47,12 +52,23 @@ export class PubSubSubscriber {
       throw new Error(errorMessage);
     }
 
+    const action = env.ACTION;
+    if (action !== 'move' && action !== 'delete') {
+      throw new Error('ACTION must be "move" or "delete"');
+    }
+
+    if (action === 'move' && !env.TARGET_LABEL) {
+      throw new Error('TARGET_LABEL is required when ACTION is "move"');
+    }
+
     return {
       projectId: env.GOOGLE_CLOUD_PROJECT!,
       credentialsPath: env.GOOGLE_APPLICATION_CREDENTIALS!,
       subscriptionName: env.SUBSCRIPTION_NAME!,
       storagePath: env.STORAGE_PATH!,
       webhookUrl: env.WEBHOOK_URL!,
+      action: action as 'move' | 'delete',
+      targetLabel: env.TARGET_LABEL
     };
   }
 
@@ -71,6 +87,14 @@ export class PubSubSubscriber {
           subscriptionName: this.config.subscriptionName,
         });
       });
+
+      // Fetch the target label ID if action is 'move'
+      if (this.config.action === 'move') {
+        this.targetLabelId = await this.messageService.getLabelIdByName(this.config.targetLabel!);
+        if (!this.targetLabelId) {
+          throw new Error(`Label "${this.config.targetLabel}" not found`);
+        }
+      }
 
       LoggingService.info(`Listening for messages on ${this.config.subscriptionName}`, {
         component: 'PubSubSubscriber',
@@ -152,6 +176,25 @@ export class PubSubSubscriber {
         emailId: email.id,
         webhookUrl: this.config.webhookUrl,
       });
+
+      // Perform the action based on config
+      if (this.config.action === 'move') {
+        await this.messageService.modifyLabels(email.id!, {
+          addLabelIds: [this.targetLabelId!],
+          removeLabelIds: ['INBOX'] // Remove from INBOX to "move" the email
+        });
+        LoggingService.info(`Moved email ${email.id} to label "${this.config.targetLabel}"`, {
+          component: 'PubSubSubscriber',
+          emailId: email.id,
+          targetLabel: this.config.targetLabel
+        });
+      } else if (this.config.action === 'delete') {
+        await this.messageService.trashEmail(email.id!);
+        LoggingService.info(`Trashed email ${email.id}`, {
+          component: 'PubSubSubscriber',
+          emailId: email.id
+        });
+      }
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       const errorStack = error instanceof Error ? error : undefined;

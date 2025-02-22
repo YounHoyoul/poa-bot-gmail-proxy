@@ -125,4 +125,72 @@ export class GmailMessageService {
       throw error;
     }
   }
+
+  /**
+ * Gets the label ID for a given label name.
+ * @param labelName - The name of the label.
+ * @returns The label ID, or null if not found.
+ */
+  public async getLabelIdByName(labelName: string): Promise<string | null | undefined> {
+    try {
+      const res = await this.gmail.users.labels.list({ userId: 'me' });
+      const labels = res.data.labels || [];
+      const label = labels.find(l => l.name === labelName);
+      return label ? label.id : null;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error : undefined;
+      LoggingService.error(`Failed to get label ID for ${labelName}: ${errorMessage}`, errorStack, {
+        component: 'GmailMessageService'
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Modifies the labels of a message.
+   * @param messageId - The ID of the message.
+   * @param modification - Labels to add and remove.
+   */
+  public async modifyLabels(
+    messageId: string,
+    modification: { addLabelIds?: string[], removeLabelIds?: string[] }
+  ): Promise<void> {
+    try {
+      await this.gmail.users.messages.modify({
+        userId: 'me',
+        id: messageId,
+        requestBody: modification
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error : undefined;
+      LoggingService.error(`Failed to modify labels for message ${messageId}: ${errorMessage}`, errorStack, {
+        component: 'GmailMessageService',
+        messageId
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Moves a message to the trash.
+   * @param messageId - The ID of the message.
+   */
+  public async trashEmail(messageId: string): Promise<void> {
+    try {
+      await this.gmail.users.messages.trash({
+        userId: 'me',
+        id: messageId
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error : undefined;
+      LoggingService.error(`Failed to trash message ${messageId}: ${errorMessage}`, errorStack, {
+        component: 'GmailMessageService',
+        messageId
+      });
+      throw error;
+    }
+  }
 }

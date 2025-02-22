@@ -17,7 +17,7 @@ export class GmailMessageService {
                 // Note: labelId parameter is not supported by History API as per documentation
                 // We must filter client-side
             });
-            LoggingService.info('Fetched user histories', {
+            LoggingService.debug('Fetched user histories', {
                 component: 'GmailMessageService',
                 historyResponse,
             });
@@ -33,6 +33,10 @@ export class GmailMessageService {
                 });
                 return [];
             }
+            LoggingService.debug('Filtered message IDs', {
+                component: 'GmailMessageService',
+                messageIds,
+            });
             // Step 2: Fetch message details for each ID
             const fetchedMessages = await Promise.all(messageIds.map((id) => this.gmail.users.messages
                 .get({

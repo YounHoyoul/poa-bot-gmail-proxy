@@ -31,7 +31,7 @@ export class GmailMessageService {
         // We must filter client-side
       });
 
-      LoggingService.info('Fetched user histories', {
+      LoggingService.debug('Fetched user histories', {
         component: 'GmailMessageService',
         historyResponse,
       });
@@ -50,6 +50,11 @@ export class GmailMessageService {
         });
         return [];
       }
+
+      LoggingService.debug('Filtered message IDs', {
+        component: 'GmailMessageService',
+        messageIds,
+      });
 
       // Step 2: Fetch message details for each ID
       const fetchedMessages = await Promise.all(

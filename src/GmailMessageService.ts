@@ -38,8 +38,8 @@ export class GmailMessageService {
 
       const messageIds =
         historyResponse.data.history
-          ?.flatMap((h) => h.messages ?? [])
-          .map((m) => m.id)
+          ?.flatMap((h) => h.messagesAdded ?? []) // Use messagesAdded instead of messages
+          .map((m) => m.message?.id)
           .filter((id): id is string => !!id) ?? [];
 
       if (!messageIds.length) {

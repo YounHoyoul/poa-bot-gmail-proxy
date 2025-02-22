@@ -22,8 +22,8 @@ export class GmailMessageService {
                 historyResponse,
             });
             const messageIds = historyResponse.data.history
-                ?.flatMap((h) => h.messages ?? [])
-                .map((m) => m.id)
+                ?.flatMap((h) => h.messagesAdded ?? []) // Use messagesAdded instead of messages
+                .map((m) => m.message?.id)
                 .filter((id) => !!id) ?? [];
             if (!messageIds.length) {
                 LoggingService.info('No new emails found in history', {

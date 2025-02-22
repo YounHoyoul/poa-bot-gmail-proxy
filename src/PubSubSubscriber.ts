@@ -2,7 +2,7 @@ import 'dotenv/config';
 import axios from 'axios';
 import { gmail_v1 } from 'googleapis';
 import { PubSub, Subscription } from '@google-cloud/pubsub';
-import { LoggingService } from './LoggingService.js'; // Updated import
+import { LoggingService } from './LoggingService.js';
 import { GmailMessageService } from './GmailMessageService.js';
 import { StorageService } from './StorageService.js';
 
@@ -12,10 +12,27 @@ interface Config {
   subscriptionName: string;
   storagePath: string;
   webhookUrl: string;
-  // New fields
-  action: 'move' | 'delete'; // Action to perform after processing
-  targetLabel?: string; // Target label name (required if action is 'move')
-  unprocessedLabel?: string; // Unprocessed label name (required if action is 'move')
+  action: 'move' | 'delete';
+  targetLabel?: string;
+  unprocessedLabel?: string;
+}
+
+type LogLevel = 'debug' | 'info' | 'error';
+
+// Define a type for logging context
+interface LogContext {
+  [key: string]: unknown;
+  component?: string;
+  messageId?: string;
+  emailId?: string;
+  internalDate?: number;
+  sender?: string;
+  webhookUrl?: string;
+  targetLabel?: string;
+  historyId?: string;
+  emails?: gmail_v1.Schema$Message[];
+  subscriptionName?: string;
+  config?: Config;
 }
 
 export class PubSubSubscriber {
@@ -35,29 +52,20 @@ export class PubSubSubscriber {
   private validateConfig(): Config {
     const env = process.env;
     const required = [
-      'GOOGLE_CLOUD_PROJECT',
-      'GOOGLE_APPLICATION_CREDENTIALS',
-      'SUBSCRIPTION_NAME',
-      'STORAGE_PATH',
-      'WEBHOOK_URL',
-      'ACTION',
-      'UNPROCESSED_LABEL',
+      'GOOGLE_CLOUD_PROJECT', 'GOOGLE_APPLICATION_CREDENTIALS', 'SUBSCRIPTION_NAME',
+      'STORAGE_PATH', 'WEBHOOK_URL', 'ACTION', 'UNPROCESSED_LABEL'
     ];
-    const missing = required.filter((key) => !env[key]);
-
+    const missing = required.filter(key => !env[key]);
     if (missing.length) {
-      const errorMessage = `Missing required environment variables: ${missing.join(', ')}`;
-      LoggingService.error(errorMessage, undefined, { component: 'PubSubSubscriber' });
-      throw new Error(errorMessage);
+      throw this.logAndThrow(`Missing required environment variables: ${missing.join(', ')}`);
     }
 
-    const action = env.ACTION;
+    const action = env.ACTION as 'move' | 'delete';
     if (action !== 'move' && action !== 'delete') {
-      throw new Error('ACTION must be "move" or "delete"');
+      throw this.logAndThrow('ACTION must be "move" or "delete"');
     }
-
     if (action === 'move' && !env.TARGET_LABEL) {
-      throw new Error('TARGET_LABEL is required when ACTION is "move"');
+      throw this.logAndThrow('TARGET_LABEL is required when ACTION is "move"');
     }
 
     return {
@@ -66,7 +74,7 @@ export class PubSubSubscriber {
       subscriptionName: env.SUBSCRIPTION_NAME!,
       storagePath: env.STORAGE_PATH!,
       webhookUrl: env.WEBHOOK_URL!,
-      action: action as 'move' | 'delete',
+      action,
       targetLabel: env.TARGET_LABEL,
       unprocessedLabel: env.UNPROCESSED_LABEL,
     };
@@ -81,213 +89,182 @@ export class PubSubSubscriber {
 
       this.subscription = pubSubClient.subscription(this.config.subscriptionName);
       this.subscription.on('message', this.handleMessage.bind(this));
-      this.subscription.on('error', (error: Error) => {
-        LoggingService.error(`Subscription error: ${error.message}`, error, {
-          component: 'PubSubSubscriber',
-          subscriptionName: this.config.subscriptionName,
-        });
-      });
+      this.subscription.on('error', error => this.logError('Subscription error', error));
 
-      // Fetch the target label ID if action is 'move'
-      if (this.config.action === 'move') {
-        this.targetLabelId = await this.storageService.getTargetLabelId();
-        if (this.targetLabelId == '') {
-          this.targetLabelId = await this.messageService.getLabelIdByName(this.config.targetLabel!);
-          if (!this.targetLabelId) {
-            throw new Error(`Label "${this.config.targetLabel}" not found`);
-          }
-          this.storageService.storeTargetLabelId(this.targetLabelId);
-        }
-      }
-
-      // Fetch the unprocessed label ID
-      this.unprocessedLabelId = await this.storageService.getUnprocessedLabelId();
-      if (!this.unprocessedLabelId) {
-        this.unprocessedLabelId = await this.messageService.getLabelIdByName(
-          this.config.unprocessedLabel!
-        );
-        if (!this.unprocessedLabelId) {
-          throw new Error(`Label "${this.config.unprocessedLabel}" not found`);
-        }
-        this.storageService.storeUnprocessedLabelId(this.unprocessedLabelId!);
-      }
-
-      LoggingService.info(`Listening for messages on ${this.config.subscriptionName}`, {
-        component: 'PubSubSubscriber',
-      });
+      await this.initializeLabelIds();
+      this.logInfo(`Listening for messages on ${this.config.subscriptionName}`);
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      const errorStack = error instanceof Error ? error : undefined;
-      LoggingService.error(`Failed to initialize PubSub: ${errorMessage}`, errorStack, {
-        component: 'PubSubSubscriber',
-        config: this.config,
-      });
-      throw error;
+      throw this.logAndThrow('Failed to initialize PubSub', error);
     }
+  }
+
+  private async initializeLabelIds(): Promise<void> {
+    if (this.config.action === 'move') {
+      this.targetLabelId = await this.getOrFetchLabelId(
+        this.storageService.getTargetLabelId.bind(this.storageService),
+        this.storageService.storeTargetLabelId.bind(this.storageService),
+        this.config.targetLabel!,
+        'targetLabel'
+      );
+    }
+
+    this.unprocessedLabelId = await this.getOrFetchLabelId(
+      this.storageService.getUnprocessedLabelId.bind(this.storageService),
+      this.storageService.storeUnprocessedLabelId.bind(this.storageService),
+      this.config.unprocessedLabel!,
+      'unprocessedLabel'
+    );
+  }
+
+  private async getOrFetchLabelId(
+    getFn: () => Promise<string>,
+    storeFn: (id: string) => Promise<void>,
+    labelName: string,
+    configField: keyof Config
+  ): Promise<string> {
+    let labelId = await getFn();
+    if (!labelId) {
+      labelId = await this.messageService.getLabelIdByName(labelName) ?? '';
+      if (!labelId) throw this.logAndThrow(`Label "${this.config[configField]}" not found`);
+      await storeFn(labelId);
+    }
+    return labelId;
   }
 
   public async close(): Promise<void> {
     if (this.subscription) {
       this.subscription.removeAllListeners();
       await this.subscription.close();
-      LoggingService.info(`Closed subscription ${this.config.subscriptionName}`, {
-        component: 'PubSubSubscriber',
-      });
+      this.logInfo(`Closed subscription ${this.config.subscriptionName}`);
     }
   }
 
-  private async handleMessage(message: {
-    id: string;
-    data: Buffer;
-    ack: () => void;
-  }): Promise<void> {
+  private async handleMessage(message: { id: string; data: Buffer; ack: () => void }): Promise<void> {
     try {
       this.storageService.resetRunningCount();
+      this.logInfo(`Received message: ${message.id}`, { messageId: message.id });
 
-      LoggingService.info(`Received message: ${message.id}`, {
-        component: 'PubSubSubscriber',
-        messageId: message.id,
-      });
+      const { historyId } = JSON.parse(message.data.toString());
+      if (!historyId) throw this.logAndThrow('historyId must not be empty');
 
-      // Parse the Buffer to a JSON object
-      const messageData = JSON.parse(message.data.toString());
-
-      // Extract historyId from the object (assuming it always has historyId)
-      const historyId = messageData.historyId as string;
-      if (historyId == '') {
-        throw new Error('historyId must not be empty.');
-      }
-
-      // Get the last history ID
-      const lastHistoryId: string = await this.storageService.getHistoryId();
-
-      // Store the new history ID
+      const lastHistoryId = await this.storageService.getHistoryId();
       await this.storageService.storeHistoryId(historyId);
-
-      // Pass the lastHistoryId to getAndProcessEmails
       await this.getAndProcessEmails(lastHistoryId);
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      const errorStack = error instanceof Error ? error : undefined;
-      LoggingService.error(`Message handling error: ${errorMessage}`, errorStack, {
-        component: 'PubSubSubscriber',
-        messageId: message.id,
-      });
+      this.logError('Message handling error', error, { messageId: message.id });
     } finally {
       message.ack();
     }
   }
 
   private async processEmail(email: gmail_v1.Schema$Message): Promise<void> {
+    const emailId = email.id!;
     const internalDate = parseInt(email.internalDate || '0', 10);
+
     if (internalDate < Date.now() - 300000) {
-      LoggingService.debug(`Skipping old email ${email.id}`, {
-        component: 'PubSubSubscriber',
-        emailId: email.id,
-        internalDate,
-      });
+      this.logDebug(`Skipping old email ${emailId}`, { internalDate });
       return;
     }
 
-    const emailContent = await this.messageService.getEmailContent(email.id!);
-    if (!emailContent?.sender.includes('noreply@tradingview.com')) {
-      LoggingService.debug(`Skipping non-TradingView email ${email.id}`, {
-        component: 'PubSubSubscriber',
-        emailId: email.id,
-        sender: emailContent?.sender,
-      });
+    const { sender, plainText } = await this.messageService.getEmailContent(email);
+    if (!sender.includes('noreply@tradingview.com')) {
+      this.logDebug(`Skipping non-TradingView email ${emailId}`, { sender });
       return;
     }
 
     try {
-      const parsedData = JSON.parse(emailContent.plainText);
-      const response = await axios.post(this.config.webhookUrl, parsedData);
-      LoggingService.info(`Webhook response: ${response.status}`, {
-        component: 'PubSubSubscriber',
-        emailId: email.id,
-        webhookUrl: this.config.webhookUrl,
-      });
-
-      // Perform the action based on config
-      if (this.config.action === 'move') {
-        if (this.targetLabelId) {
-          await this.messageService.modifyLabels(email.id!, {
-            addLabelIds: [this.targetLabelId!],
-            removeLabelIds: ['INBOX'], // Remove from INBOX to "move" the email
-          });
-          LoggingService.info(`Moved email ${email.id} to label "${this.config.targetLabel}"`, {
-            component: 'PubSubSubscriber',
-            emailId: email.id,
-            targetLabel: this.config.targetLabel,
-          });
-        }
-      } else if (this.config.action === 'delete') {
-        await this.messageService.trashEmail(email.id!);
-        LoggingService.info(`Trashed email ${email.id}`, {
-          component: 'PubSubSubscriber',
-          emailId: email.id,
-        });
-      }
+      await this.processValidEmail(emailId, plainText);
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      const errorStack = error instanceof Error ? error : undefined;
-      LoggingService.error(`Failed to process email ${email.id}: ${errorMessage}`, errorStack, {
-        component: 'PubSubSubscriber',
-        emailId: email.id,
-      });
-
-      if (this.unprocessedLabelId) {
-        await this.messageService.modifyLabels(email.id!, {
-          addLabelIds: [this.unprocessedLabelId!],
-          removeLabelIds: ['INBOX'], // Remove from INBOX to "move" the email
-        });
-        LoggingService.info(`Moved email ${email.id} to label "${this.config.unprocessedLabel}"`, {
-          component: 'PubSubSubscriber',
-          emailId: email.id,
-          targetLabel: this.config.targetLabel,
-        });
-      }
+      await this.handleProcessingError(emailId, error);
     }
+  }
+
+  private async processValidEmail(emailId: string, plainText: string): Promise<void> {
+    const parsedData = JSON.parse(plainText);
+    const response = await axios.post(this.config.webhookUrl, parsedData);
+    this.logInfo(`Webhook response: ${response.status}`, { webhookUrl: this.config.webhookUrl });
+    await this.handleEmailAction(emailId);
+  }
+
+  private async handleEmailAction(emailId: string): Promise<void> {
+    if (this.config.action === 'delete' || !this.targetLabelId) {
+      await this.trashEmail(emailId);
+    } else if (this.config.action === 'move') {
+      await this.moveEmail(emailId, this.targetLabelId!, this.config.targetLabel!);
+    }
+  }
+
+  private async handleProcessingError(emailId: string, error: unknown): Promise<void> {
+    this.logError(`Failed to process email ${emailId}`, error, { emailId });
+    if (this.unprocessedLabelId) {
+      await this.moveEmail(emailId, this.unprocessedLabelId, this.config.unprocessedLabel!);
+    } else {
+      await this.trashEmail(emailId);
+    }
+  }
+
+  private async moveEmail(emailId: string, labelId: string, labelName: string): Promise<void> {
+    await this.messageService.modifyLabels(emailId, {
+      addLabelIds: [labelId],
+      removeLabelIds: ['INBOX'],
+    });
+    this.logInfo(`Moved email ${emailId} to label "${labelName}"`, { targetLabel: labelName });
+  }
+
+  private async trashEmail(emailId: string): Promise<void> {
+    await this.messageService.trashEmail(emailId);
+    this.logInfo(`Trashed email ${emailId}`, { emailId });
   }
 
   private async getAndProcessEmails(lastHistoryId: string): Promise<void> {
     const emails = await this.messageService.getEmailsByHistoryId(lastHistoryId);
-    LoggingService.debug('Fetched emails:', {
-      component: 'PubSubSubscriber',
-      emails: emails,
-    });
+    this.logDebug('Fetched emails:', { emails });
 
     if (!emails.length) {
-      LoggingService.info('No emails to process', {
-        component: 'PubSubSubscriber',
-        historyId: lastHistoryId,
-      });
+      this.logInfo('No emails to process', { historyId: lastHistoryId });
       return;
     }
 
-    emails.sort(
-      (a, b) => parseInt(a.internalDate || '0', 10) - parseInt(b.internalDate || '0', 10)
-    );
+    emails.sort((a, b) => parseInt(a.internalDate || '0', 10) - parseInt(b.internalDate || '0', 10));
 
     for (const email of emails) {
-      if (
-        (await this.storageService.getLastProcessedEmailId()) == email.id ||
-        (await this.storageService.isEmailProcessed(email.id!))
-      ) {
-        LoggingService.info(
-          `Skipping processed email ${email.id} because it has already been processed`,
-          {
-            component: 'PubSubSubscriber',
-            emailId: email.id,
-          }
-        );
+      const emailId = email.id!;
+      if (await this.isEmailProcessed(emailId)) {
+        this.logInfo(`Skipping processed email ${emailId} because it has already been processed`, { emailId });
         continue;
       }
 
       await this.processEmail(email);
-
-      await this.storageService.storeLastProcessedEmailId(email.id!);
-      await this.storageService.addProcessedEmailIds(email.id!);
+      await this.storageService.storeLastProcessedEmailId(emailId);
+      await this.storageService.addProcessedEmailIds(emailId);
     }
+  }
+
+  private async isEmailProcessed(emailId: string): Promise<boolean> {
+    return (await this.storageService.getLastProcessedEmailId()) === emailId || 
+           await this.storageService.isEmailProcessed(emailId);
+  }
+
+  // Logging helpers
+  private log(level: LogLevel, message: string, extra: LogContext = {}, error?: unknown) {
+    const errorStack = error instanceof Error ? error : undefined;
+    LoggingService[level](message, errorStack, { component: 'PubSubSubscriber', ...extra });
+  }
+
+  private logDebug(message: string, extra?: LogContext) {
+    this.log('debug', message, extra);
+  }
+
+  private logInfo(message: string, extra?: LogContext) {
+    this.log('info', message, extra);
+  }
+
+  private logError(message: string, error: unknown, extra: LogContext = {}) {
+    this.log('error', `${message}: ${error instanceof Error ? error.message : String(error)}`, extra, error);
+  }
+
+  private logAndThrow(message: string, error?: unknown): Error {
+    this.logError(message, error);
+    throw error instanceof Error ? error : new Error(message);
   }
 }

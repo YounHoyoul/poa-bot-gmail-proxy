@@ -44,8 +44,7 @@ export class GmailMessageService {
             const inboxMessages = await Promise.all(uniqueMessageIds.map((id) => this.gmail.users.messages
                 .get({
                 userId,
-                id,
-                format: 'minimal', // Use minimal format to get labelIds efficiently
+                id
             })
                 .then((res) => res.data)));
             if (inboxMessages.length === 0) {
@@ -73,13 +72,9 @@ export class GmailMessageService {
             throw error;
         }
     }
-    async getEmailContent(messageId) {
+    async getEmailContent(message) {
+        const messageId = message.id;
         try {
-            this.storageService.increaseRunningCount();
-            const { data: message } = await this.gmail.users.messages.get({
-                userId: 'me',
-                id: messageId,
-            });
             if (!message.payload?.headers) {
                 const errorMessage = `Invalid email format for message ${messageId}`;
                 LoggingService.error(errorMessage, undefined, {

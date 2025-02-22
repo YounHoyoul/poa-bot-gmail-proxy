@@ -8,6 +8,7 @@ export class PubSubSubscriber {
     config;
     subscription;
     targetLabelId = null;
+    unprocessedLabelId = null;
     constructor(messageService, storageService) {
         this.config = this.validateConfig();
         this.messageService = messageService;
@@ -21,7 +22,8 @@ export class PubSubSubscriber {
             'SUBSCRIPTION_NAME',
             'STORAGE_PATH',
             'WEBHOOK_URL',
-            'ACTION' // New required field
+            'ACTION',
+            'UNPROCESSED_LABEL'
         ];
         const missing = required.filter((key) => !env[key]);
         if (missing.length) {
@@ -43,7 +45,8 @@ export class PubSubSubscriber {
             storagePath: env.STORAGE_PATH,
             webhookUrl: env.WEBHOOK_URL,
             action: action,
-            targetLabel: env.TARGET_LABEL
+            targetLabel: env.TARGET_LABEL,
+            unprocessedLabel: env.UNPROCESSED_LABEL,
         };
     }
     async initialize() {
@@ -166,6 +169,17 @@ export class PubSubSubscriber {
             LoggingService.error(`Failed to process email ${email.id}: ${errorMessage}`, errorStack, {
                 component: 'PubSubSubscriber',
                 emailId: email.id,
+            });
+            if (!this.unprocessedLabelId)
+                this.unprocessedLabelId = await this.messageService.getLabelIdByName(this.config.unprocessedLabel);
+            await this.messageService.modifyLabels(email.id, {
+                addLabelIds: [this.unprocessedLabelId],
+                removeLabelIds: ['INBOX'] // Remove from INBOX to "move" the email
+            });
+            LoggingService.info(`Moved email ${email.id} to label "${this.config.unprocessedLabel}"`, {
+                component: 'PubSubSubscriber',
+                emailId: email.id,
+                targetLabel: this.config.targetLabel
             });
         }
     }

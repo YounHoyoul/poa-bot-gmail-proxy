@@ -19,6 +19,7 @@ interface Config {
   // New fields
   action: 'move' | 'delete'; // Action to perform after processing
   targetLabel?: string; // Target label name (required if action is 'move')
+  unprocessedLabel?: string; // Unprocessed label name (required if action is 'move')
 }
 
 export class PubSubSubscriber {
@@ -27,6 +28,7 @@ export class PubSubSubscriber {
   private readonly config: Config;
   private subscription?: Subscription;
   private targetLabelId: string | null | undefined = null;
+  private unprocessedLabelId: string | null | undefined = null;
 
   constructor(messageService: GmailMessageService, storageService: StorageService) {
     this.config = this.validateConfig();
@@ -42,7 +44,8 @@ export class PubSubSubscriber {
       'SUBSCRIPTION_NAME',
       'STORAGE_PATH',
       'WEBHOOK_URL',
-      'ACTION' // New required field
+      'ACTION',
+      'UNPROCESSED_LABEL'
     ];
     const missing = required.filter((key) => !env[key]);
 
@@ -68,7 +71,8 @@ export class PubSubSubscriber {
       storagePath: env.STORAGE_PATH!,
       webhookUrl: env.WEBHOOK_URL!,
       action: action as 'move' | 'delete',
-      targetLabel: env.TARGET_LABEL
+      targetLabel: env.TARGET_LABEL,
+      unprocessedLabel: env.UNPROCESSED_LABEL,
     };
   }
 
@@ -201,6 +205,19 @@ export class PubSubSubscriber {
       LoggingService.error(`Failed to process email ${email.id}: ${errorMessage}`, errorStack, {
         component: 'PubSubSubscriber',
         emailId: email.id,
+      });
+
+      if (!this.unprocessedLabelId)
+        this.unprocessedLabelId = await this.messageService.getLabelIdByName(this.config.unprocessedLabel!);
+
+      await this.messageService.modifyLabels(email.id!, {
+        addLabelIds: [this.unprocessedLabelId!],
+        removeLabelIds: ['INBOX'] // Remove from INBOX to "move" the email
+      });
+      LoggingService.info(`Moved email ${email.id} to label "${this.config.unprocessedLabel}"`, {
+        component: 'PubSubSubscriber',
+        emailId: email.id,
+        targetLabel: this.config.targetLabel
       });
     }
   }

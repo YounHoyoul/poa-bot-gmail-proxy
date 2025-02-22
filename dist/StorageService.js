@@ -1,12 +1,25 @@
-import { writeFileSync, readFileSync, existsSync, mkdirSync } from 'fs';
+import { Low } from 'lowdb';
+import { JSONFile } from 'lowdb/node';
 import { LoggingService } from './LoggingService.js';
 import 'dotenv/config';
 import path from 'path';
+import { existsSync, mkdirSync } from 'fs';
 export class StorageService {
+    db;
     storagePath;
     constructor(storagePath = process.env.STORAGE_PATH ?? './storage/history.json') {
         this.storagePath = storagePath;
         this.ensureStorageDirectory();
+        const adapter = new JSONFile(this.storagePath);
+        this.db = new Low(adapter, {
+            historyId: '',
+            targetLabelId: '',
+            unprocessedLabelId: '',
+            runningCount: 0,
+            lastProcessedEamilId: '',
+            processedEmailIds: [],
+        });
+        this.initializeDatabase();
     }
     ensureStorageDirectory() {
         const storageDir = path.dirname(this.storagePath);
@@ -18,7 +31,6 @@ export class StorageService {
                 });
             }
             catch (error) {
-                // Type 'unknown' from catch, assert or check as Error
                 const errorMessage = error instanceof Error ? error.message : String(error);
                 const errorStack = error instanceof Error ? error : undefined;
                 LoggingService.error(`Failed to create storage directory: ${errorMessage}`, errorStack, {
@@ -29,37 +41,350 @@ export class StorageService {
             }
         }
     }
-    async readHistory() {
+    async initializeDatabase() {
         try {
-            const content = existsSync(this.storagePath) ? readFileSync(this.storagePath, 'utf8') : '{}';
-            LoggingService.debug(`Read history from ${this.storagePath} - ${content}`, {
+            await this.db.read();
+            this.db.data ||= {
+                historyId: '',
+                targetLabelId: '',
+                unprocessedLabelId: '',
+                runningCount: 0,
+                lastProcessedEamilId: '',
+                processedEmailIds: [],
+            };
+            await this.db.write();
+            LoggingService.info('JSON database initialized successfully', {
                 component: 'StorageService',
-                length: content.length,
             });
-            return content;
         }
         catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
             const errorStack = error instanceof Error ? error : undefined;
-            LoggingService.error(`Failed to read history from ${this.storagePath}: ${errorMessage}`, errorStack, {
+            LoggingService.error(`Failed to initialize database: ${errorMessage}`, errorStack, {
                 component: 'StorageService',
                 storagePath: this.storagePath,
             });
             throw error;
         }
     }
-    async storeHistory(content) {
+    async readHistory() {
         try {
-            writeFileSync(this.storagePath, content, 'utf8');
-            LoggingService.info(`Stored history to ${this.storagePath} - ${content}`, {
+            await this.db.read();
+            const record = this.db.data;
+            LoggingService.debug(`Read history record from database`, {
                 component: 'StorageService',
-                size: content.length,
+                historyId: record.historyId,
+            });
+            return record;
+        }
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            const errorStack = error instanceof Error ? error : undefined;
+            LoggingService.error(`Failed to read history from database: ${errorMessage}`, errorStack, {
+                component: 'StorageService',
+                storagePath: this.storagePath,
+            });
+            throw error;
+        }
+    }
+    async getHistoryId() {
+        try {
+            await this.db.read();
+            const historyId = this.db.data.historyId;
+            LoggingService.debug(`Retrieved historyId from database`, {
+                component: 'StorageService',
+                historyId,
+            });
+            return historyId;
+        }
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            const errorStack = error instanceof Error ? error : undefined;
+            LoggingService.error(`Failed to get historyId from database: ${errorMessage}`, errorStack, {
+                component: 'StorageService',
+                storagePath: this.storagePath,
+            });
+            throw error;
+        }
+    }
+    async getTargetLabelId() {
+        try {
+            await this.db.read();
+            const targetLabelId = this.db.data.targetLabelId;
+            LoggingService.debug(`Retrieved targetLabelId from database`, {
+                component: 'StorageService',
+                targetLabelId,
+            });
+            return targetLabelId;
+        }
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            const errorStack = error instanceof Error ? error : undefined;
+            LoggingService.error(`Failed to get targetLabelId from database: ${errorMessage}`, errorStack, {
+                component: 'StorageService',
+                storagePath: this.storagePath,
+            });
+            throw error;
+        }
+    }
+    async getUnprocessedLabelId() {
+        try {
+            await this.db.read();
+            const unprocessedLabelId = this.db.data.unprocessedLabelId;
+            LoggingService.debug(`Retrieved unprocessedLabelId from database`, {
+                component: 'StorageService',
+                unprocessedLabelId,
+            });
+            return unprocessedLabelId;
+        }
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            const errorStack = error instanceof Error ? error : undefined;
+            LoggingService.error(`Failed to get unprocessedLabelId from database: ${errorMessage}`, errorStack, {
+                component: 'StorageService',
+                storagePath: this.storagePath,
+            });
+            throw error;
+        }
+    }
+    async getLastProcessedEmailId() {
+        try {
+            await this.db.read();
+            const lastProcessedEamilId = this.db.data.lastProcessedEamilId;
+            LoggingService.debug(`Retrieved lastProcessedEamilId from database`, {
+                component: 'StorageService',
+                lastProcessedEamilId,
+            });
+            return lastProcessedEamilId;
+        }
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            const errorStack = error instanceof Error ? error : undefined;
+            LoggingService.error(`Failed to get lastProcessedEamilId from database: ${errorMessage}`, errorStack, {
+                component: 'StorageService',
+                storagePath: this.storagePath,
+            });
+            throw error;
+        }
+    }
+    async getRunningCount() {
+        try {
+            await this.db.read();
+            const runningCount = this.db.data.runningCount;
+            LoggingService.debug(`Retrieved runningCount from database`, {
+                component: 'StorageService',
+                runningCount,
+            });
+            return runningCount;
+        }
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            const errorStack = error instanceof Error ? error : undefined;
+            LoggingService.error(`Failed to get runningCount from database: ${errorMessage}`, errorStack, {
+                component: 'StorageService',
+                storagePath: this.storagePath,
+            });
+            throw error;
+        }
+    }
+    async storeHistoryId(historyId) {
+        try {
+            await this.db.read();
+            this.db.data.historyId = historyId;
+            await this.db.write();
+            LoggingService.info(`Stored historyId to database`, {
+                component: 'StorageService',
+                historyId,
             });
         }
         catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
             const errorStack = error instanceof Error ? error : undefined;
-            LoggingService.error(`Failed to store history to ${this.storagePath}: ${errorMessage}`, errorStack, {
+            LoggingService.error(`Failed to store historyId to database: ${errorMessage}`, errorStack, {
+                component: 'StorageService',
+                storagePath: this.storagePath,
+            });
+            throw error;
+        }
+    }
+    async storeTargetLabelId(targetLabelId) {
+        try {
+            await this.db.read();
+            this.db.data.targetLabelId = targetLabelId;
+            await this.db.write();
+            LoggingService.info(`Stored targetLabelId to database`, {
+                component: 'StorageService',
+                targetLabelId,
+            });
+        }
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            const errorStack = error instanceof Error ? error : undefined;
+            LoggingService.error(`Failed to store targetLabelId to database: ${errorMessage}`, errorStack, {
+                component: 'StorageService',
+                storagePath: this.storagePath,
+            });
+            throw error;
+        }
+    }
+    async storeUnprocessedLabelId(unprocessedLabelId) {
+        try {
+            await this.db.read();
+            this.db.data.unprocessedLabelId = unprocessedLabelId;
+            await this.db.write();
+            LoggingService.info(`Stored unprocessedLabelId to database`, {
+                component: 'StorageService',
+                unprocessedLabelId,
+            });
+        }
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            const errorStack = error instanceof Error ? error : undefined;
+            LoggingService.error(`Failed to store unprocessedLabelId to database: ${errorMessage}`, errorStack, {
+                component: 'StorageService',
+                storagePath: this.storagePath,
+            });
+            throw error;
+        }
+    }
+    async storeLastProcessedEmailId(lastProcessedEamilId) {
+        try {
+            await this.db.read();
+            this.db.data.lastProcessedEamilId = lastProcessedEamilId;
+            await this.db.write();
+            LoggingService.info(`Stored lastProcessedEamilId to database`, {
+                component: 'StorageService',
+                lastProcessedEamilId,
+            });
+        }
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            const errorStack = error instanceof Error ? error : undefined;
+            LoggingService.error(`Failed to store lastProcessedEamilId to database: ${errorMessage}`, errorStack, {
+                component: 'StorageService',
+                storagePath: this.storagePath,
+            });
+            throw error;
+        }
+    }
+    async resetRunningCount() {
+        try {
+            await this.db.read();
+            this.db.data.runningCount = 0;
+            await this.db.write();
+            LoggingService.info(`Stored runningCount to database`, {
+                component: 'StorageService',
+                runningCount: 0,
+            });
+        }
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            const errorStack = error instanceof Error ? error : undefined;
+            LoggingService.error(`Failed to store runningCount to database: ${errorMessage}`, errorStack, {
+                component: 'StorageService',
+                storagePath: this.storagePath,
+            });
+            throw error;
+        }
+    }
+    async increaseRunningCount() {
+        try {
+            await this.db.read();
+            this.db.data.runningCount = this.db.data.runningCount + 1;
+            await this.db.write();
+            LoggingService.info(`Stored runningCount to database`, {
+                component: 'StorageService',
+                runningCount: this.db.data.runningCount,
+            });
+        }
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            const errorStack = error instanceof Error ? error : undefined;
+            LoggingService.error(`Failed to store runningCount to database: ${errorMessage}`, errorStack, {
+                component: 'StorageService',
+                storagePath: this.storagePath,
+            });
+            throw error;
+        }
+    }
+    async addProcessedEmailIds(emailId) {
+        try {
+            await this.db.read();
+            if (!this.db.data.processedEmailIds.includes(emailId)) {
+                this.db.data.processedEmailIds.push(emailId);
+                // Check if array exceeds 100 items
+                if (this.db.data.processedEmailIds.length > 100) {
+                    // Calculate how many items to remove from the beginning
+                    const itemsToRemove = this.db.data.processedEmailIds.length - 100;
+                    // Remove oldest items from the start of the array
+                    const removedItems = this.db.data.processedEmailIds.splice(0, itemsToRemove);
+                    LoggingService.debug(`Trimmed processedEmailIds to maintain 100 items max`, {
+                        component: 'StorageService',
+                        removedCount: itemsToRemove,
+                        removedItems,
+                        newLength: this.db.data.processedEmailIds.length,
+                    });
+                }
+                await this.db.write();
+                LoggingService.info(`Added emailId to processedEmailIds`, {
+                    component: 'StorageService',
+                    emailId,
+                    totalProcessed: this.db.data.processedEmailIds.length,
+                });
+            }
+            else {
+                LoggingService.debug(`EmailId already in processedEmailIds`, {
+                    component: 'StorageService',
+                    emailId,
+                });
+            }
+        }
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            const errorStack = error instanceof Error ? error : undefined;
+            LoggingService.error(`Failed to add emailId to processedEmailIds: ${errorMessage}`, errorStack, {
+                component: 'StorageService',
+                storagePath: this.storagePath,
+                emailId,
+            });
+            throw error;
+        }
+    }
+    async isEmailProcessed(emailId) {
+        try {
+            await this.db.read();
+            const hasBeenProcessed = this.db.data.processedEmailIds.includes(emailId);
+            LoggingService.debug(`Checked if email has been processed`, {
+                component: 'StorageService',
+                emailId,
+                hasBeenProcessed,
+            });
+            return hasBeenProcessed;
+        }
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            const errorStack = error instanceof Error ? error : undefined;
+            LoggingService.error(`Failed to check if email has been processed: ${errorMessage}`, errorStack, {
+                component: 'StorageService',
+                storagePath: this.storagePath,
+                emailId,
+            });
+            throw error;
+        }
+    }
+    async resetProcessedEmailIds() {
+        try {
+            await this.db.read();
+            this.db.data.processedEmailIds = [];
+            await this.db.write();
+            LoggingService.info(`Reset processedEmailIds array`, {
+                component: 'StorageService',
+            });
+        }
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            const errorStack = error instanceof Error ? error : undefined;
+            LoggingService.error(`Failed to reset processedEmailIds: ${errorMessage}`, errorStack, {
                 component: 'StorageService',
                 storagePath: this.storagePath,
             });

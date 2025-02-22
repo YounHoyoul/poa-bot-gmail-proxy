@@ -2,11 +2,14 @@ import { google } from 'googleapis';
 import { LoggingService } from './LoggingService.js'; // Updated import
 export class GmailMessageService {
     gmail;
-    constructor(auth) {
+    storageService;
+    constructor(auth, storageService) {
         this.gmail = google.gmail({ version: 'v1', auth });
+        this.storageService = storageService;
     }
     async getEmailsByHistoryId(historyId, userId = 'me') {
         try {
+            this.storageService.increaseRunningCount();
             const historyResponse = await this.gmail.users.history.list({
                 userId,
                 startHistoryId: historyId,
@@ -45,6 +48,7 @@ export class GmailMessageService {
     }
     async getEmailContent(messageId) {
         try {
+            this.storageService.increaseRunningCount();
             const { data: message } = await this.gmail.users.messages.get({
                 userId: 'me',
                 id: messageId,
@@ -104,6 +108,7 @@ export class GmailMessageService {
    */
     async getLabelIdByName(labelName) {
         try {
+            this.storageService.increaseRunningCount();
             const res = await this.gmail.users.labels.list({ userId: 'me' });
             const labels = res.data.labels || [];
             const label = labels.find(l => l.name === labelName);
@@ -125,6 +130,7 @@ export class GmailMessageService {
      */
     async modifyLabels(messageId, modification) {
         try {
+            this.storageService.increaseRunningCount();
             await this.gmail.users.messages.modify({
                 userId: 'me',
                 id: messageId,
@@ -147,6 +153,7 @@ export class GmailMessageService {
      */
     async trashEmail(messageId) {
         try {
+            this.storageService.increaseRunningCount();
             await this.gmail.users.messages.trash({
                 userId: 'me',
                 id: messageId

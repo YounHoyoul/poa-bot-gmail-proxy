@@ -1,7 +1,7 @@
 import { google, gmail_v1 } from 'googleapis';
 import { LoggingService } from './LoggingService.js'; // Updated import
 import { OAuth2Client } from 'google-auth-library';
-
+import {StorageService} from "./StorageService.js";
 export interface EmailContent {
   sender: string;
   date: string;
@@ -12,13 +12,17 @@ export interface EmailContent {
 
 export class GmailMessageService {
   private readonly gmail: gmail_v1.Gmail;
+  private readonly storageService: StorageService;
 
-  constructor(auth: OAuth2Client) {
+  constructor(auth: OAuth2Client, storageService: StorageService) {
     this.gmail = google.gmail({ version: 'v1', auth });
+    this.storageService = storageService;
   }
 
   async getEmailsByHistoryId(historyId: string, userId = 'me'): Promise<gmail_v1.Schema$Message[]> {
     try {
+      this.storageService.increaseRunningCount();
+
       const historyResponse = await this.gmail.users.history.list({
         userId,
         startHistoryId: historyId,
@@ -65,6 +69,8 @@ export class GmailMessageService {
 
   async getEmailContent(messageId: string): Promise<EmailContent> {
     try {
+      this.storageService.increaseRunningCount();
+
       const { data: message } = await this.gmail.users.messages.get({
         userId: 'me',
         id: messageId,
@@ -133,6 +139,8 @@ export class GmailMessageService {
  */
   public async getLabelIdByName(labelName: string): Promise<string | null | undefined> {
     try {
+      this.storageService.increaseRunningCount();
+
       const res = await this.gmail.users.labels.list({ userId: 'me' });
       const labels = res.data.labels || [];
       const label = labels.find(l => l.name === labelName);
@@ -157,6 +165,8 @@ export class GmailMessageService {
     modification: { addLabelIds?: string[], removeLabelIds?: string[] }
   ): Promise<void> {
     try {
+      this.storageService.increaseRunningCount();
+
       await this.gmail.users.messages.modify({
         userId: 'me',
         id: messageId,
@@ -179,6 +189,8 @@ export class GmailMessageService {
    */
   public async trashEmail(messageId: string): Promise<void> {
     try {
+      this.storageService.increaseRunningCount();
+      
       await this.gmail.users.messages.trash({
         userId: 'me',
         id: messageId

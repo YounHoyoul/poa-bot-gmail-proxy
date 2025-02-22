@@ -66,13 +66,14 @@ export class GmailWatchService {
       });
 
       const watchResponse = response.data;
+      
       LoggingService.info(`Watch response received`, {
         component: 'GmailWatchService',
         topicName: this.topicName,
         response: JSON.stringify(watchResponse),
       });
 
-      await this.storageService.storeHistory(JSON.stringify(watchResponse));
+      await this.storageService.storeHistoryId(watchResponse.historyId!);
       return watchResponse;
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);

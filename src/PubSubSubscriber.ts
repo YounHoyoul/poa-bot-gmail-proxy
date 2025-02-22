@@ -6,10 +6,6 @@ import { LoggingService } from './LoggingService.js'; // Updated import
 import { GmailMessageService } from './GmailMessageService.js';
 import { StorageService } from './StorageService.js';
 
-interface StorageData {
-  historyId: string;
-}
-
 interface Config {
   projectId: string;
   credentialsPath: string;
@@ -94,10 +90,24 @@ export class PubSubSubscriber {
 
       // Fetch the target label ID if action is 'move'
       if (this.config.action === 'move') {
-        this.targetLabelId = await this.messageService.getLabelIdByName(this.config.targetLabel!);
-        if (!this.targetLabelId) {
-          throw new Error(`Label "${this.config.targetLabel}" not found`);
+        this.targetLabelId = await this.storageService.getTargetLabelId();
+        if (this.targetLabelId == '') {
+          this.targetLabelId = await this.messageService.getLabelIdByName(this.config.targetLabel!);
+          if (!this.targetLabelId) {
+            throw new Error(`Label "${this.config.targetLabel}" not found`);
+          }
+          this.storageService.storeTargetLabelId(this.targetLabelId);
         }
+      }
+
+      // Fetch the unprocessed label ID
+      this.unprocessedLabelId = await this.storageService.getUnprocessedLabelId();
+      if (!this.unprocessedLabelId) {
+        this.unprocessedLabelId = await this.messageService.getLabelIdByName(this.config.unprocessedLabel!);
+        if (!this.unprocessedLabelId) {
+          throw new Error(`Label "${this.config.unprocessedLabel}" not found`);
+        }
+        this.storageService.storeUnprocessedLabelId(this.unprocessedLabelId!);
       }
 
       LoggingService.info(`Listening for messages on ${this.config.subscriptionName}`, {
@@ -130,15 +140,30 @@ export class PubSubSubscriber {
     ack: () => void;
   }): Promise<void> {
     try {
+      this.storageService.resetRunningCount();
+
       LoggingService.info(`Received message: ${message.id}`, {
         component: 'PubSubSubscriber',
         messageId: message.id,
-      });
-      const messageData = message.data.toString();
+      });      
 
-      const lastHistory: StorageData = JSON.parse(await this.storageService.readHistory());
-      await this.storageService.storeHistory(messageData);
-      await this.getAndProcessEmails(lastHistory);
+      // Parse the Buffer to a JSON object
+      const messageData = JSON.parse(message.data.toString());
+
+      // Extract historyId from the object (assuming it always has historyId)
+      const historyId = messageData.historyId as string;
+      if (typeof historyId !== 'string') {
+        throw new Error('historyId must be a string');
+      }
+
+      // Get the last history ID
+      const lastHistoryId: string = await this.storageService.getHistoryId();
+
+      // Store the new history ID
+      await this.storageService.storeHistoryId(historyId);
+
+      // Pass the lastHistoryId to getAndProcessEmails
+      await this.getAndProcessEmails(lastHistoryId);
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       const errorStack = error instanceof Error ? error : undefined;
@@ -183,15 +208,17 @@ export class PubSubSubscriber {
 
       // Perform the action based on config
       if (this.config.action === 'move') {
-        await this.messageService.modifyLabels(email.id!, {
-          addLabelIds: [this.targetLabelId!],
-          removeLabelIds: ['INBOX'] // Remove from INBOX to "move" the email
-        });
-        LoggingService.info(`Moved email ${email.id} to label "${this.config.targetLabel}"`, {
-          component: 'PubSubSubscriber',
-          emailId: email.id,
-          targetLabel: this.config.targetLabel
-        });
+        if (this.targetLabelId) {
+          await this.messageService.modifyLabels(email.id!, {
+            addLabelIds: [this.targetLabelId!],
+            removeLabelIds: ['INBOX'] // Remove from INBOX to "move" the email
+          });
+          LoggingService.info(`Moved email ${email.id} to label "${this.config.targetLabel}"`, {
+            component: 'PubSubSubscriber',
+            emailId: email.id,
+            targetLabel: this.config.targetLabel
+          });
+        }
       } else if (this.config.action === 'delete') {
         await this.messageService.trashEmail(email.id!);
         LoggingService.info(`Trashed email ${email.id}`, {
@@ -207,27 +234,31 @@ export class PubSubSubscriber {
         emailId: email.id,
       });
 
-      if (!this.unprocessedLabelId)
-        this.unprocessedLabelId = await this.messageService.getLabelIdByName(this.config.unprocessedLabel!);
-
-      await this.messageService.modifyLabels(email.id!, {
-        addLabelIds: [this.unprocessedLabelId!],
-        removeLabelIds: ['INBOX'] // Remove from INBOX to "move" the email
-      });
-      LoggingService.info(`Moved email ${email.id} to label "${this.config.unprocessedLabel}"`, {
-        component: 'PubSubSubscriber',
-        emailId: email.id,
-        targetLabel: this.config.targetLabel
-      });
+      if (this.unprocessedLabelId) {
+        await this.messageService.modifyLabels(email.id!, {
+          addLabelIds: [this.unprocessedLabelId!],
+          removeLabelIds: ['INBOX'] // Remove from INBOX to "move" the email
+        });
+        LoggingService.info(`Moved email ${email.id} to label "${this.config.unprocessedLabel}"`, {
+          component: 'PubSubSubscriber',
+          emailId: email.id,
+          targetLabel: this.config.targetLabel
+        });
+      }
     }
   }
 
-  private async getAndProcessEmails(lastHistory: StorageData): Promise<void> {
-    const emails = await this.messageService.getEmailsByHistoryId(lastHistory.historyId);
+  private async getAndProcessEmails(lastHistoryId: string): Promise<void> {
+    const emails = await this.messageService.getEmailsByHistoryId(lastHistoryId);
+    LoggingService.debug('Fetched emails:', {
+      component: 'PubSubSubscriber',
+      emails: emails,
+    });
+
     if (!emails.length) {
       LoggingService.info('No emails to process', {
         component: 'PubSubSubscriber',
-        historyId: lastHistory.historyId,
+        historyId: lastHistoryId,
       });
       return;
     }
@@ -237,7 +268,19 @@ export class PubSubSubscriber {
     );
 
     for (const email of emails) {
+      if(await this.storageService.getLastProcessedEmailId() == email.id ||
+         await this.storageService.isEmailProcessed(email.id!)) {
+        LoggingService.info(`Skipping processed email ${email.id} because it has already been processed`, {
+          component: 'PubSubSubscriber',
+          emailId: email.id,
+        });
+        continue;
+      }
+
       await this.processEmail(email);
+
+      await this.storageService.storeLastProcessedEmailId(email.id!);
+      await this.storageService.addProcessedEmailIds(email.id!);
     }
   }
 }

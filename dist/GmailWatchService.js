@@ -59,7 +59,7 @@ export class GmailWatchService {
                 topicName: this.topicName,
                 response: JSON.stringify(watchResponse),
             });
-            await this.storageService.storeHistory(JSON.stringify(watchResponse));
+            await this.storageService.storeHistoryId(watchResponse.historyId);
             return watchResponse;
         }
         catch (error) {

@@ -38,9 +38,10 @@ export class GmailMessageService {
 
       const messageIds =
         historyResponse.data.history
-          ?.flatMap((h) => h.messagesAdded ?? []) // Use messagesAdded instead of messages
-          .map((m) => m.message?.id)
-          .filter((id): id is string => !!id) ?? [];
+          ?.flatMap((h) => h.messagesAdded ?? []) // Use messagesAdded
+          .filter((m) => m.message?.labelIds?.includes('INBOX')) // Filter for INBOX
+          .map((m) => m.message?.id) // Extract ID
+          .filter((id): id is string => !!id) ?? []; // Ensure non-null IDs
 
       if (!messageIds.length) {
         LoggingService.info('No new emails found in history', {
@@ -51,14 +52,17 @@ export class GmailMessageService {
         return [];
       }
 
+      // Remove duplicates
+      const uniqueMessageIds = [...new Set(messageIds)];
+
       LoggingService.debug('Filtered message IDs', {
         component: 'GmailMessageService',
-        messageIds,
+        uniqueMessageIds,
       });
 
       // Step 2: Fetch message details for each ID
-      const fetchedMessages = await Promise.all(
-        messageIds.map((id) =>
+      const inboxMessages = await Promise.all(
+        uniqueMessageIds.map((id) =>
           this.gmail.users.messages
             .get({
               userId,
@@ -69,27 +73,19 @@ export class GmailMessageService {
         )
       );
 
-      // Step 3: Filter for messages with INBOX label only
-      const inboxMessages = fetchedMessages.filter((message) =>
-        message.labelIds?.includes('INBOX')
-      );
-
       if (inboxMessages.length === 0) {
         LoggingService.info('No new emails found in Inbox', {
           component: 'GmailMessageService',
           historyId,
           userId,
-          totalMessagesFound: fetchedMessages.length,
-        });
-      } else {
-        LoggingService.info(`Fetched ${inboxMessages.length} emails from Inbox`, {
-          component: 'GmailMessageService',
-          historyId,
-          userId,
-          messageCount: inboxMessages.length,
-          totalMessagesFound: fetchedMessages.length,
+          totalMessagesFound: inboxMessages.length,
         });
       }
+
+      LoggingService.debug('Fetched inbox messages', {
+        component: 'GmailMessageService',
+        inboxMessages,
+      });
 
       return inboxMessages;
     } catch (error: unknown) {

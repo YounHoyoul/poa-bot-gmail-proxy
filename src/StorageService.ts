@@ -93,14 +93,10 @@ export class StorageService {
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       const errorStack = error instanceof Error ? error : undefined;
-      LoggingService.error(
-        `Failed to read history from database: ${errorMessage}`,
-        errorStack,
-        {
-          component: 'StorageService',
-          storagePath: this.storagePath,
-        }
-      );
+      LoggingService.error(`Failed to read history from database: ${errorMessage}`, errorStack, {
+        component: 'StorageService',
+        storagePath: this.storagePath,
+      });
       throw error;
     }
   }
@@ -117,14 +113,10 @@ export class StorageService {
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       const errorStack = error instanceof Error ? error : undefined;
-      LoggingService.error(
-        `Failed to get historyId from database: ${errorMessage}`,
-        errorStack,
-        {
-          component: 'StorageService',
-          storagePath: this.storagePath,
-        }
-      );
+      LoggingService.error(`Failed to get historyId from database: ${errorMessage}`, errorStack, {
+        component: 'StorageService',
+        storagePath: this.storagePath,
+      });
       throw error;
     }
   }
@@ -237,14 +229,10 @@ export class StorageService {
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       const errorStack = error instanceof Error ? error : undefined;
-      LoggingService.error(
-        `Failed to store historyId to database: ${errorMessage}`,
-        errorStack,
-        {
-          component: 'StorageService',
-          storagePath: this.storagePath,
-        }
-      );
+      LoggingService.error(`Failed to store historyId to database: ${errorMessage}`, errorStack, {
+        component: 'StorageService',
+        storagePath: this.storagePath,
+      });
       throw error;
     }
   }
@@ -373,9 +361,12 @@ export class StorageService {
     try {
       await this.db.read();
       if (this.db.data.processedEmailIds == null) {
-        LoggingService.warn(`processedEmailIds was null or undefined, initializing to empty array`, {
-          component: 'StorageService',
-        });
+        LoggingService.warn(
+          `processedEmailIds was null or undefined, initializing to empty array`,
+          {
+            component: 'StorageService',
+          }
+        );
         this.db.data.processedEmailIds = [];
       }
       if (!this.db.data.processedEmailIds.includes(emailId)) {
@@ -468,14 +459,10 @@ export class StorageService {
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       const errorStack = error instanceof Error ? error : undefined;
-      LoggingService.error(
-        `Failed to reset processedEmailIds: ${errorMessage}`,
-        errorStack,
-        {
-          component: 'StorageService',
-          storagePath: this.storagePath,
-        }
-      );
+      LoggingService.error(`Failed to reset processedEmailIds: ${errorMessage}`, errorStack, {
+        component: 'StorageService',
+        storagePath: this.storagePath,
+      });
       throw error;
     }
   }

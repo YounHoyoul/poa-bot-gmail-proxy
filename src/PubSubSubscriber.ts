@@ -41,7 +41,7 @@ export class PubSubSubscriber {
       'STORAGE_PATH',
       'WEBHOOK_URL',
       'ACTION',
-      'UNPROCESSED_LABEL'
+      'UNPROCESSED_LABEL',
     ];
     const missing = required.filter((key) => !env[key]);
 
@@ -103,7 +103,9 @@ export class PubSubSubscriber {
       // Fetch the unprocessed label ID
       this.unprocessedLabelId = await this.storageService.getUnprocessedLabelId();
       if (!this.unprocessedLabelId) {
-        this.unprocessedLabelId = await this.messageService.getLabelIdByName(this.config.unprocessedLabel!);
+        this.unprocessedLabelId = await this.messageService.getLabelIdByName(
+          this.config.unprocessedLabel!
+        );
         if (!this.unprocessedLabelId) {
           throw new Error(`Label "${this.config.unprocessedLabel}" not found`);
         }
@@ -145,7 +147,7 @@ export class PubSubSubscriber {
       LoggingService.info(`Received message: ${message.id}`, {
         component: 'PubSubSubscriber',
         messageId: message.id,
-      });      
+      });
 
       // Parse the Buffer to a JSON object
       const messageData = JSON.parse(message.data.toString());
@@ -211,19 +213,19 @@ export class PubSubSubscriber {
         if (this.targetLabelId) {
           await this.messageService.modifyLabels(email.id!, {
             addLabelIds: [this.targetLabelId!],
-            removeLabelIds: ['INBOX'] // Remove from INBOX to "move" the email
+            removeLabelIds: ['INBOX'], // Remove from INBOX to "move" the email
           });
           LoggingService.info(`Moved email ${email.id} to label "${this.config.targetLabel}"`, {
             component: 'PubSubSubscriber',
             emailId: email.id,
-            targetLabel: this.config.targetLabel
+            targetLabel: this.config.targetLabel,
           });
         }
       } else if (this.config.action === 'delete') {
         await this.messageService.trashEmail(email.id!);
         LoggingService.info(`Trashed email ${email.id}`, {
           component: 'PubSubSubscriber',
-          emailId: email.id
+          emailId: email.id,
         });
       }
     } catch (error: unknown) {
@@ -237,12 +239,12 @@ export class PubSubSubscriber {
       if (this.unprocessedLabelId) {
         await this.messageService.modifyLabels(email.id!, {
           addLabelIds: [this.unprocessedLabelId!],
-          removeLabelIds: ['INBOX'] // Remove from INBOX to "move" the email
+          removeLabelIds: ['INBOX'], // Remove from INBOX to "move" the email
         });
         LoggingService.info(`Moved email ${email.id} to label "${this.config.unprocessedLabel}"`, {
           component: 'PubSubSubscriber',
           emailId: email.id,
-          targetLabel: this.config.targetLabel
+          targetLabel: this.config.targetLabel,
         });
       }
     }
@@ -268,12 +270,17 @@ export class PubSubSubscriber {
     );
 
     for (const email of emails) {
-      if(await this.storageService.getLastProcessedEmailId() == email.id ||
-         await this.storageService.isEmailProcessed(email.id!)) {
-        LoggingService.info(`Skipping processed email ${email.id} because it has already been processed`, {
-          component: 'PubSubSubscriber',
-          emailId: email.id,
-        });
+      if (
+        (await this.storageService.getLastProcessedEmailId()) == email.id ||
+        (await this.storageService.isEmailProcessed(email.id!))
+      ) {
+        LoggingService.info(
+          `Skipping processed email ${email.id} because it has already been processed`,
+          {
+            component: 'PubSubSubscriber',
+            emailId: email.id,
+          }
+        );
         continue;
       }
 

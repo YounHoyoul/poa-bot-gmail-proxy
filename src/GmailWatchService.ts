@@ -29,22 +29,26 @@ export class GmailWatchService {
     const watchResponse = await this.watchGmail();
 
     // Schedule renewal every 6 days
-    cron.schedule('0 0 */6 * *', async () => {
-      try {
-        await this.watchGmail();
-        LoggingService.info('Gmail watch renewed successfully via cron', {
-          component: 'GmailWatchService',
-          topicName: this.topicName,
-        });
-      } catch (error) {
-        LoggingService.error('Cron job failed to renew Gmail watch', error as Error, {
-          component: 'GmailWatchService',
-          topicName: this.topicName,
-        });
+    cron.schedule(
+      '0 0 */6 * *',
+      async () => {
+        try {
+          await this.watchGmail();
+          LoggingService.info('Gmail watch renewed successfully via cron', {
+            component: 'GmailWatchService',
+            topicName: this.topicName,
+          });
+        } catch (error) {
+          LoggingService.error('Cron job failed to renew Gmail watch', error as Error, {
+            component: 'GmailWatchService',
+            topicName: this.topicName,
+          });
+        }
+      },
+      {
+        timezone: 'UTC', // Adjust to your timezone, e.g., 'America/Los_Angeles'
       }
-    }, {
-      timezone: 'UTC', // Adjust to your timezone, e.g., 'America/Los_Angeles'
-    });
+    );
 
     LoggingService.info('Cron job scheduled for Gmail watch renewal every 6 days', {
       component: 'GmailWatchService',
@@ -66,7 +70,7 @@ export class GmailWatchService {
       });
 
       const watchResponse = response.data;
-      
+
       LoggingService.info(`Watch response received`, {
         component: 'GmailWatchService',
         topicName: this.topicName,

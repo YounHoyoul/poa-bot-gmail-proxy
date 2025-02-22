@@ -46,6 +46,7 @@ export class LoggingService {
             transports: [
                 new transports.Console(), // Console output remains unchanged
                 new DailyRotateFile({
+                    // Replace File with DailyRotateFile
                     filename: logPath, // e.g., './logs/app-%DATE%.log'
                     datePattern: 'YYYY-MM-DD', // Rotate daily (e.g., app-2025-02-21.log)
                     maxSize: '5m', // 5MB per file (optional, matches your original maxsize)

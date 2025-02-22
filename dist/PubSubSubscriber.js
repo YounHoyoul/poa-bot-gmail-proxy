@@ -23,7 +23,7 @@ export class PubSubSubscriber {
             'STORAGE_PATH',
             'WEBHOOK_URL',
             'ACTION',
-            'UNPROCESSED_LABEL'
+            'UNPROCESSED_LABEL',
         ];
         const missing = required.filter((key) => !env[key]);
         if (missing.length) {
@@ -171,12 +171,12 @@ export class PubSubSubscriber {
                 if (this.targetLabelId) {
                     await this.messageService.modifyLabels(email.id, {
                         addLabelIds: [this.targetLabelId],
-                        removeLabelIds: ['INBOX'] // Remove from INBOX to "move" the email
+                        removeLabelIds: ['INBOX'], // Remove from INBOX to "move" the email
                     });
                     LoggingService.info(`Moved email ${email.id} to label "${this.config.targetLabel}"`, {
                         component: 'PubSubSubscriber',
                         emailId: email.id,
-                        targetLabel: this.config.targetLabel
+                        targetLabel: this.config.targetLabel,
                     });
                 }
             }
@@ -184,7 +184,7 @@ export class PubSubSubscriber {
                 await this.messageService.trashEmail(email.id);
                 LoggingService.info(`Trashed email ${email.id}`, {
                     component: 'PubSubSubscriber',
-                    emailId: email.id
+                    emailId: email.id,
                 });
             }
         }
@@ -198,12 +198,12 @@ export class PubSubSubscriber {
             if (this.unprocessedLabelId) {
                 await this.messageService.modifyLabels(email.id, {
                     addLabelIds: [this.unprocessedLabelId],
-                    removeLabelIds: ['INBOX'] // Remove from INBOX to "move" the email
+                    removeLabelIds: ['INBOX'], // Remove from INBOX to "move" the email
                 });
                 LoggingService.info(`Moved email ${email.id} to label "${this.config.unprocessedLabel}"`, {
                     component: 'PubSubSubscriber',
                     emailId: email.id,
-                    targetLabel: this.config.targetLabel
+                    targetLabel: this.config.targetLabel,
                 });
             }
         }
@@ -223,8 +223,8 @@ export class PubSubSubscriber {
         }
         emails.sort((a, b) => parseInt(a.internalDate || '0', 10) - parseInt(b.internalDate || '0', 10));
         for (const email of emails) {
-            if (await this.storageService.getLastProcessedEmailId() == email.id ||
-                await this.storageService.isEmailProcessed(email.id)) {
+            if ((await this.storageService.getLastProcessedEmailId()) == email.id ||
+                (await this.storageService.isEmailProcessed(email.id))) {
                 LoggingService.info(`Skipping processed email ${email.id} because it has already been processed`, {
                     component: 'PubSubSubscriber',
                     emailId: email.id,

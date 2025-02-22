@@ -64,11 +64,12 @@ export class LoggingService {
       defaultMeta: { service: LoggingService.SERVICE_NAME },
       transports: [
         new transports.Console(), // Console output remains unchanged
-        new DailyRotateFile({     // Replace File with DailyRotateFile
-          filename: logPath,      // e.g., './logs/app-%DATE%.log'
+        new DailyRotateFile({
+          // Replace File with DailyRotateFile
+          filename: logPath, // e.g., './logs/app-%DATE%.log'
           datePattern: 'YYYY-MM-DD', // Rotate daily (e.g., app-2025-02-21.log)
-          maxSize: '5m',          // 5MB per file (optional, matches your original maxsize)
-          maxFiles: '14d',        // Keep logs for 14 days (adjustable)
+          maxSize: '5m', // 5MB per file (optional, matches your original maxsize)
+          maxFiles: '14d', // Keep logs for 14 days (adjustable)
         }),
       ],
     });
@@ -78,7 +79,11 @@ export class LoggingService {
     });
   }
 
-  private static async sendToCloud(level: LogLevel, message: string, meta: Partial<LogEntry> = {}): Promise<void> {
+  private static async sendToCloud(
+    level: LogLevel,
+    message: string,
+    meta: Partial<LogEntry> = {}
+  ): Promise<void> {
     if (!LoggingService.cloudLogger) return;
 
     const log = LoggingService.cloudLogger.log('app_logs'); // Log name in Cloud Logging
@@ -99,12 +104,17 @@ export class LoggingService {
     }
   }
 
-  private static async sendToDiscord(level: LogLevel, message: string, meta: Partial<LogEntry> = {}): Promise<void> {
+  private static async sendToDiscord(
+    level: LogLevel,
+    message: string,
+    meta: Partial<LogEntry> = {}
+  ): Promise<void> {
     if (!LoggingService.DISCORD_WEBHOOK_URL) return; // Skip if URL is not set
 
     if (level === LogLevel.ERROR || level === LogLevel.FATAL) {
       const payload = {
-        content: `**${level.toUpperCase()}**: ${message}\n` +
+        content:
+          `**${level.toUpperCase()}**: ${message}\n` +
           (meta.error ? `\`\`\`\n${meta.error}\n\`\`\`` : ''),
         username: 'Log Bot',
       };

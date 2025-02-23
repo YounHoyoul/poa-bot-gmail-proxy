@@ -1,5 +1,5 @@
 This project is inspried by the following project:
-- https://github.com/YounHoyoul/poa-bot-gmail-proxy.git
+- https://github.com/jangdokang/POA.git
 
 This is to connect from TradingViewer to Binance.
 - TradingView
@@ -68,14 +68,14 @@ This is to connect from TradingViewer to Binance.
     - Add Roles
         - Pub/Sub Editor
         - Pub/Sub Subscriber
-- Add Principals to subscriptions
+- Add Principals to Topis
     - Move to "Pub/Sub"
-    - Move to Subscriptions
+    - Move to Topic
     - Click Pencil and open view permissions
     - Click Add Principal button
         - Fill in the form
-        - Principal : ********-compute@developer.gserviceaccount.com
-        - Role : Editor
+        - Principal : gmail-api-push@system.gserviceaccount.com
+        - Role : Pub/Sub Publisher
 
 # Steps to set up server/poabot.config
 - You need to set up Poabot templage (server/poabot.config)

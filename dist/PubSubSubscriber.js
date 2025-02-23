@@ -48,7 +48,12 @@ export class PubSubSubscriber {
                 projectId: this.config.projectId,
                 keyFilename: this.config.credentialsPath,
             });
-            this.subscription = pubSubClient.subscription(this.config.subscriptionName);
+            // Configure the subscription with flow control
+            this.subscription = pubSubClient.subscription(this.config.subscriptionName, {
+                flowControl: {
+                    maxMessages: 1, // Limits to 1 concurrent message at a time
+                },
+            });
             this.subscription.on('message', this.handleMessage.bind(this));
             this.subscription.on('error', error => this.logError('Subscription error', error));
             await this.initializeLabelIds();

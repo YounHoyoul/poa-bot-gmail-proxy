@@ -126,11 +126,11 @@ export class PubSubSubscriber {
     }
     async processValidEmail(emailId, plainText) {
         const parsedData = JSON.parse(plainText);
-        if (parsedData.password != "HealthCheck") {
+        if (parsedData.password == "HealthCheck") {
             try {
                 if (process.env.DISCORD_WEBHOOK_URL)
                     await axios.post(process.env.DISCORD_WEBHOOK_URL, {
-                        content: `[${format(new Date(), 'yyyy-MM-dd HH:mm:ss')}]Server Health Check`,
+                        content: `[${format(new Date(), 'yyyy-MM-dd HH:mm:ss')}] Server Health Check`,
                         username: 'Log Bot',
                     });
             }

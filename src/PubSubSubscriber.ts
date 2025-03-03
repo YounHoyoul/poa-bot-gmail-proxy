@@ -5,6 +5,7 @@ import { PubSub, Subscription } from '@google-cloud/pubsub';
 import { LoggingService } from './LoggingService.js';
 import { GmailMessageService } from './GmailMessageService.js';
 import { StorageService } from './StorageService.js';
+import { format } from 'date-fns';
 
 interface Config {
   projectId: string;
@@ -187,8 +188,21 @@ export class PubSubSubscriber {
 
   private async processValidEmail(emailId: string, plainText: string): Promise<void> {
     const parsedData = JSON.parse(plainText);
-    const response = await axios.post(this.config.webhookUrl, parsedData);
-    this.logInfo(`Webhook response: ${response.status}`, { webhookUrl: this.config.webhookUrl });
+    if(parsedData.password != "HealthCheck"){
+      try {
+        if(process.env.DISCORD_WEBHOOK_URL)
+          await axios.post(process.env.DISCORD_WEBHOOK_URL, {
+            content: `[${format(new Date(), 'yyyy-MM-dd HH:mm:ss')}]Server Health Check`,
+            username: 'Log Bot',
+          });
+      } catch (error) {
+        console.error('Failed to send message to Discord:', error);
+      }
+    }else {
+      const response = await axios.post(this.config.webhookUrl, parsedData);
+      this.logInfo(`Webhook response: ${response.status}`, { webhookUrl: this.config.webhookUrl });
+    }
+    
     await this.handleEmailAction(emailId);
   }
 

@@ -2,6 +2,7 @@ import 'dotenv/config';
 import axios from 'axios';
 import { PubSub } from '@google-cloud/pubsub';
 import { LoggingService } from './LoggingService.js';
+import { format } from 'date-fns';
 export class PubSubSubscriber {
     messageService;
     storageService;
@@ -125,8 +126,22 @@ export class PubSubSubscriber {
     }
     async processValidEmail(emailId, plainText) {
         const parsedData = JSON.parse(plainText);
-        const response = await axios.post(this.config.webhookUrl, parsedData);
-        this.logInfo(`Webhook response: ${response.status}`, { webhookUrl: this.config.webhookUrl });
+        if (parsedData.password != "HealthCheck") {
+            try {
+                if (process.env.DISCORD_WEBHOOK_URL)
+                    await axios.post(process.env.DISCORD_WEBHOOK_URL, {
+                        content: `[${format(new Date(), 'yyyy-MM-dd HH:mm:ss')}]Server Health Check`,
+                        username: 'Log Bot',
+                    });
+            }
+            catch (error) {
+                console.error('Failed to send message to Discord:', error);
+            }
+        }
+        else {
+            const response = await axios.post(this.config.webhookUrl, parsedData);
+            this.logInfo(`Webhook response: ${response.status}`, { webhookUrl: this.config.webhookUrl });
+        }
         await this.handleEmailAction(emailId);
     }
     async handleEmailAction(emailId) {

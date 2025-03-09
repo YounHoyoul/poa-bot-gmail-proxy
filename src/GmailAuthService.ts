@@ -96,6 +96,19 @@ export class GmailAuthService {
 
     const oAuth2Client = new google.auth.OAuth2(client_id, client_secret, redirect_uris[0]);
 
+    // 토큰 자동 갱신 설정
+    oAuth2Client.on('tokens', async (tokens) => {
+      if (tokens.refresh_token) {
+        // 리프레시 토큰이 새로 발급된 경우 저장
+        const currentTokens = oAuth2Client.credentials;
+        currentTokens.refresh_token = tokens.refresh_token;
+        writeFileSync(this.tokenPath, JSON.stringify(currentTokens));
+      } else {
+        // 액세스 토큰만 갱신된 경우
+        writeFileSync(this.tokenPath, JSON.stringify(oAuth2Client.credentials));
+      }
+    });
+
     if (!isNewToken) {
       if (!existsSync(this.tokenPath)) {
         const errorMessage = `Token file not found at ${this.tokenPath}`;
@@ -107,13 +120,6 @@ export class GmailAuthService {
       }
       const token: Credentials = JSON.parse(readFileSync(this.tokenPath, 'utf8'));
 
-      // 토큰이 만료되었는지 확인하고 갱신
-      if (token.expiry_date! <= Date.now()) {
-        const { credentials } = await oAuth2Client.refreshAccessToken();
-        writeFileSync(this.tokenPath, JSON.stringify(credentials));
-        oAuth2Client.setCredentials(credentials);
-      }
-      
       oAuth2Client.setCredentials(token);
       LoggingService.info('OAuth2 client initialized with existing token', {
         component: 'GmailAuthService',

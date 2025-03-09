@@ -125,6 +125,11 @@ export class GmailAuthService {
         component: 'GmailAuthService',
         tokenPath: this.tokenPath,
       });
+
+      setInterval(async () => {
+        await this.forceRefreshToken(oAuth2Client);
+      }, 60000 * 60 * 24);
+
     } else {
       LoggingService.info('OAuth2 client initialized for new token', {
         component: 'GmailAuthService',
@@ -133,5 +138,19 @@ export class GmailAuthService {
     }
 
     return oAuth2Client;
+  }
+
+  async forceRefreshToken(oAuth2Client: OAuth2Client) {
+    try {
+      const { credentials } = await oAuth2Client.refreshAccessToken();
+      oAuth2Client.setCredentials(credentials);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error : undefined;
+      LoggingService.error(`Failed to force refrsh token: ${errorMessage}`, errorStack, {
+        component: 'GmailAuthService',
+        tokenPath: this.tokenPath,
+      });
+    }
   }
 }

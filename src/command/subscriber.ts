@@ -9,14 +9,17 @@ try {
   const storageService = new StorageService();
 
   const gmailWatchService = new GmailWatchService(
-    new GmailAuthService().getAuth2Client(),
+    await new GmailAuthService().getAuth2Client(),
     storageService
   );
 
   await gmailWatchService.startWatchWithRenewal();
 
   const subscriber = new PubSubSubscriber(
-    new GmailMessageService(new GmailAuthService().getAuth2Client(), storageService),
+    new GmailMessageService(
+      await new GmailAuthService().getAuth2Client(), 
+      storageService
+    ),
     storageService
   );
 

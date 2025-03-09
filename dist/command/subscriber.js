@@ -6,9 +6,9 @@ import { PubSubSubscriber } from '../PubSubSubscriber.js';
 import { StorageService } from '../StorageService.js';
 try {
     const storageService = new StorageService();
-    const gmailWatchService = new GmailWatchService(new GmailAuthService().getAuth2Client(), storageService);
+    const gmailWatchService = new GmailWatchService(await new GmailAuthService().getAuth2Client(), storageService);
     await gmailWatchService.startWatchWithRenewal();
-    const subscriber = new PubSubSubscriber(new GmailMessageService(new GmailAuthService().getAuth2Client(), storageService), storageService);
+    const subscriber = new PubSubSubscriber(new GmailMessageService(await new GmailAuthService().getAuth2Client(), storageService), storageService);
     await subscriber.initialize();
 }
 catch (error) {

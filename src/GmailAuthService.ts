@@ -81,7 +81,7 @@ export class GmailAuthService {
     });
   }
 
-  getAuth2Client(isNewToken: boolean = false): OAuth2Client {
+  async getAuth2Client(isNewToken: boolean = false): Promise<OAuth2Client> {
     if (!existsSync(this.credentialsPath)) {
       const errorMessage = `Credentials file not found at ${this.credentialsPath}`;
       LoggingService.error(errorMessage, undefined, {
@@ -106,6 +106,14 @@ export class GmailAuthService {
         throw new Error(errorMessage);
       }
       const token: Credentials = JSON.parse(readFileSync(this.tokenPath, 'utf8'));
+
+      // 토큰이 만료되었는지 확인하고 갱신
+      if (token.expiry_date! <= Date.now()) {
+        const { credentials } = await oAuth2Client.refreshAccessToken();
+        writeFileSync(this.tokenPath, JSON.stringify(credentials));
+        oAuth2Client.setCredentials(credentials);
+      }
+      
       oAuth2Client.setCredentials(token);
       LoggingService.info('OAuth2 client initialized with existing token', {
         component: 'GmailAuthService',

@@ -126,9 +126,14 @@ export class GmailAuthService {
         tokenPath: this.tokenPath,
       });
 
+      var tokenRefreshTime = 60 * 60 * 24 * 1000;
+      if (process.env.TOKEN_REFRESH_TIME) {
+        tokenRefreshTime = parseInt(process.env.TOKEN_REFRESH_TIME);
+      }
+
       setInterval(async () => {
         await this.forceRefreshToken(oAuth2Client);
-      }, 60000 * 60 * 24);
+      }, tokenRefreshTime);
 
     } else {
       LoggingService.info('OAuth2 client initialized for new token', {
